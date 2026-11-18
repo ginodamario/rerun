@@ -641,10 +641,9 @@ impl ViewClass for TimeSeriesView {
         let x_range = resolve_time_range(&view_time_range);
 
         let scalar_axis = ViewProperty::from_archetype::<ScalarAxis>(&view_ctx);
-        let y_range = scalar_axis.component_or_fallback::<Range1D>(
-            &view_ctx,
-            ScalarAxis::descriptor_range().component,
-        )?;
+        let scalar_range_component = ScalarAxis::descriptor_range();
+        let y_range = scalar_axis
+            .component_or_fallback::<Range1D>(&view_ctx, scalar_range_component.component)?;
         let y_range = make_range_sane(y_range);
 
         let zoom_lock = Vec2b::new(
@@ -722,6 +721,7 @@ impl ViewClass for TimeSeriesView {
 
             let mut plot_double_clicked = false;
             let mut new_view_time_range = None;
+            let plot_left = ui.available_rect_before_wrap().left();
             let egui_plot::PlotResponse {
                 inner: (),
                 response,
@@ -743,6 +743,21 @@ impl ViewClass for TimeSeriesView {
                 plot_ui.set_plot_bounds_y(y_range);
                 plot_ui.set_plot_bounds_x(x_range);
             });
+
+            // egui_plot exposes the data rectangle, so use its left edge to find the Y axis.
+            // Sense clicks here while egui_plot's axis widget handles drags.
+            let y_axis_rect = egui::Rect::from_x_y_ranges(
+                plot_left..=response.rect.left(),
+                response.rect.y_range(),
+            );
+            let y_axis_double_clicked = y_axis_rect.is_positive()
+                && ui
+                    .interact(
+                        y_axis_rect,
+                        plot_id.with("y_axis_click"),
+                        egui::Sense::CLICK,
+                    )
+                    .double_clicked();
 
             // Merge per-series finite ranges from visible series (used as the
             // fallback for `ScalarAxis::descriptor_range()`).
@@ -850,7 +865,14 @@ impl ViewClass for TimeSeriesView {
             // Can determine whether we're resetting only now since we need to know whether there's a plot item hovered.
             let is_resetting = plot_double_clicked && hovered_data_result.is_none();
 
-            if is_resetting {
+            if y_axis_double_clicked
+                && scalar_axis
+                    .component_raw(scalar_range_component.component)
+                    .is_some()
+            {
+                scalar_axis.clear_blueprint_component(ctx, scalar_range_component);
+                ui.request_repaint();
+            } else if is_resetting {
                 reset_view(ctx, &time_range_property, &scalar_axis);
 
                 ui.request_repaint(); // Make sure we get another frame with the view reset.
@@ -899,7 +921,7 @@ impl ViewClass for TimeSeriesView {
                     if new_y_range != y_range {
                         scalar_axis.save_blueprint_component(
                             ctx,
-                            &ScalarAxis::descriptor_range(),
+                            &scalar_range_component,
                             &new_y_range,
                         );
                         ui.request_repaint(); // Make sure we get another frame with this new range applied.
