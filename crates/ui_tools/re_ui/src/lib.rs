@@ -318,6 +318,9 @@ fn set_themes(egui_ctx: &egui::Context) {
         let mut style = std::sync::Arc::unwrap_or_clone(egui_ctx.style_of(theme));
         design_tokens_of(theme).apply(&mut style);
 
+        // Wait for the hover delay on each widget, even after another tooltip was visible.
+        style.interaction.tooltip_grace_time = 0.0;
+
         // Disable `warn_if_rect_changes_id`.
         // We have widgets with expected ID changes per rect (e.g. scrolling tables).
         #[cfg(debug_assertions)]
