@@ -1167,6 +1167,9 @@ impl AppCore {
                     app_blueprint.toggle_selection_panel(&self.command_sender);
                 }
             }
+            UICommand::CloseSidePanels => {
+                app_blueprint.close_side_panels(&self.command_sender);
+            }
             UICommand::ToggleAgentPanel => {
                 self.toggle_agent_panel();
             }

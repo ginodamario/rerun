@@ -216,6 +216,30 @@ impl<'a> AppBlueprint<'a> {
         );
     }
 
+    pub fn close_side_panels(&self, command_sender: &CommandSender) {
+        for (path, state, overridden) in [
+            (
+                BLUEPRINT_PANEL_PATH,
+                self.blueprint_panel_state(),
+                self.blueprint_panel_overridden(),
+            ),
+            (
+                SELECTION_PANEL_PATH,
+                self.selection_panel_state(),
+                self.selection_panel_overridden(),
+            ),
+            (
+                TIME_PANEL_PATH,
+                self.time_panel_state(),
+                self.time_panel_overridden(),
+            ),
+        ] {
+            if !overridden && !state.is_hidden() {
+                self.send_panel_state(path, PanelState::Hidden, command_sender);
+            }
+        }
+    }
+
     pub fn blueprint_panel_overridden(&self) -> bool {
         self.overrides.is_some_and(|s| s.blueprint.is_some())
     }
@@ -346,4 +370,59 @@ fn load_panel_state(
     blueprint_db
         .latest_at_component_quiet::<PanelState>(path, query, component)
         .map(|(_index, p)| p)
+}
+
+#[cfg(all(test, feature = "testing"))]
+mod tests {
+    use re_chunk_store::LatestAtQuery;
+    use re_log_types::{StoreId, StoreKind};
+    use re_sdk_types::blueprint::components::PanelState::{Collapsed, Expanded, Hidden};
+    use re_viewer_context::{Route, SystemCommand, SystemCommandSender as _, blueprint_timeline};
+
+    use super::AppBlueprint;
+    use crate::viewer_test_utils::{HarnessOptions, viewer_harness};
+
+    #[tokio::test]
+    async fn close_side_panels_shortcut_hides_panels() {
+        let mut harness = viewer_harness(&HarnessOptions {
+            window_size: Some(egui::vec2(1200.0, 800.0)),
+            ..Default::default()
+        });
+        let recording_id = StoreId::random(StoreKind::Recording, "close_panels_test");
+        let app_id = recording_id.application_id().clone();
+        let app = harness.state_mut();
+        app.store_hub_mut().entity_db_entry(&recording_id);
+        app.command_sender
+            .send_system(SystemCommand::SetRoute(Route::LocalRecording {
+                recording_id,
+            }));
+        harness.run_steps(3);
+
+        let states = |harness: &egui_kittest::Harness<'_, crate::App>| {
+            let blueprint_db = harness
+                .state()
+                .store_hub()
+                .active_blueprint_for_app(&app_id)
+                .expect("recording has an active blueprint");
+            let query = LatestAtQuery::latest(blueprint_timeline());
+            let blueprint = AppBlueprint::new(Some(blueprint_db), &query, &harness.ctx, None);
+            [
+                blueprint.blueprint_panel_state(),
+                blueprint.selection_panel_state(),
+                blueprint.time_panel_state(),
+                blueprint.top_panel_state(),
+            ]
+        };
+
+        let modifiers = egui::Modifiers::CTRL | egui::Modifiers::SHIFT;
+        harness.key_press_modifiers(modifiers, egui::Key::T);
+        harness.run_steps(3);
+        assert_eq!(states(&harness), [Expanded, Expanded, Collapsed, Expanded]);
+
+        for _ in 0..2 {
+            harness.key_press_modifiers(modifiers, egui::Key::C);
+            harness.run_steps(3);
+            assert_eq!(states(&harness), [Hidden, Hidden, Hidden, Expanded]);
+        }
+    }
 }

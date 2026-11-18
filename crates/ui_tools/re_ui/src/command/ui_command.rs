@@ -48,6 +48,7 @@ pub enum UICommand {
     ExpandBlueprintPanel,
     ToggleSelectionPanel,
     ExpandSelectionPanel,
+    CloseSidePanels,
 
     ToggleAgentPanel,
     OpenSettings,
@@ -188,6 +189,10 @@ impl UICommand {
             Self::ExpandBlueprintPanel => ("Expand blueprint panel", "Expand the left panel"),
             Self::ToggleSelectionPanel => ("Toggle selection panel", "Toggle the right panel"),
             Self::ExpandSelectionPanel => ("Expand selection panel", "Expand the right panel"),
+            Self::CloseSidePanels => (
+                "Close side panels",
+                "Hide the Blueprint, Selection, and Time panels",
+            ),
 
             Self::ToggleAgentPanel => (
                 "Toggle agent panel",
@@ -343,6 +348,7 @@ impl UICommand {
             Self::ExpandBlueprintPanel => smallvec![],
             Self::ToggleSelectionPanel => smallvec![ctrl_shift(Key::S)],
             Self::ExpandSelectionPanel => smallvec![],
+            Self::CloseSidePanels => smallvec![ctrl_shift(Key::C)],
 
             Self::ToggleAgentPanel => smallvec![ctrl_shift(Key::A)],
 

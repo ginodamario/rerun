@@ -179,6 +179,7 @@ impl CommandKind {
                 | UICommand::ExpandBlueprintPanel
                 | UICommand::ToggleSelectionPanel
                 | UICommand::ExpandSelectionPanel
+                | UICommand::CloseSidePanels
                 | UICommand::ToggleAgentPanel
                 | UICommand::OpenSettings
                 | UICommand::ToggleFullscreen
@@ -288,6 +289,7 @@ impl CommandKind {
                 | UICommand::ExpandBlueprintPanel
                 | UICommand::ToggleSelectionPanel
                 | UICommand::ExpandSelectionPanel
+                | UICommand::CloseSidePanels
                 | UICommand::ToggleAgentPanel
                 | UICommand::OpenSettings
                 | UICommand::ToggleFullscreen
@@ -408,6 +410,7 @@ impl CommandKind {
                 | UICommand::ExpandBlueprintPanel
                 | UICommand::ToggleSelectionPanel
                 | UICommand::ExpandSelectionPanel
+                | UICommand::CloseSidePanels
                 | UICommand::ToggleAgentPanel
                 | UICommand::OpenSettings
                 | UICommand::ToggleFullscreen
