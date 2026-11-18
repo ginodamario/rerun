@@ -7,7 +7,7 @@ use re_log_types::external::arrow::datatypes::{DataType, Field};
 use re_log_types::{EntityPath, TimePoint, Timeline, TimelineName};
 use re_sdk_types::archetypes::{self, Scalars, SeriesLines, SeriesPoints, Transform3D};
 use re_sdk_types::blueprint;
-use re_sdk_types::blueprint::archetypes::VisibleTimeRanges;
+use re_sdk_types::blueprint::archetypes::{ScalarAxis, TimeAxis, VisibleTimeRanges};
 use re_sdk_types::encodings::{self, TimeRange};
 use re_sdk_types::{DynamicArchetype, ToArrow as _, VisualizableArchetype as _, components};
 use re_test_context::TestContext;
@@ -16,7 +16,87 @@ use re_test_context::external::egui_kittest::SnapshotResults;
 use re_test_viewport::TestContextExt as _;
 use re_view_time_series::TimeSeriesView;
 use re_viewer_context::{BlueprintContext as _, ViewClass as _, ViewId};
-use re_viewport_blueprint::ViewBlueprint;
+use re_viewport_blueprint::{ViewBlueprint, ViewProperty};
+
+#[test]
+fn double_clicking_scalar_axis_unsets_scalar_range() {
+    let mut test_context = TestContext::new_with_view_class::<TimeSeriesView>();
+    let timeline = Timeline::log_tick();
+    for (tick, value) in [(1, 2.0), (2, 4.0)] {
+        test_context.log_entity("plot", |builder| {
+            builder.with_archetype_auto_row([(timeline, tick)], &Scalars::single(value))
+        });
+    }
+    test_context.set_active_timeline(*timeline.name());
+
+    let fixed_range = components::Range1D::new(-10.0, 10.0);
+    let view_id =
+        test_context.setup_viewport_blueprint(|ctx, blueprint| {
+            let view = ViewBlueprint::new_with_root_wildcard(TimeSeriesView::identifier());
+            ViewProperty::from_archetype_for_view::<ScalarAxis>(ctx, view.id)
+                .save_blueprint_component(ctx, &ScalarAxis::descriptor_range(), &fixed_range);
+            blueprint.add_view_at_root(view)
+        });
+
+    // Unsetting must also work when the default blueprint supplies a fixed range.
+    let default_blueprint_id = test_context.active_blueprint().store_id().clone();
+    let store_hub = test_context.store_hub.get_mut();
+    store_hub
+        .set_default_blueprint_for_app(&default_blueprint_id)
+        .unwrap();
+    store_hub
+        .set_cloned_blueprint_active_for_app(&default_blueprint_id)
+        .unwrap();
+
+    let time_range = blueprint::components::TimeRange(TimeRange::from_cursor_plus_minus(10));
+    test_context.with_blueprint_ctx(|ctx, _| {
+        ViewProperty::from_archetype_for_view::<TimeAxis>(&ctx, view_id).save_blueprint_component(
+            &ctx,
+            &TimeAxis::descriptor_view_range(),
+            &time_range,
+        );
+    });
+
+    let axis_ranges = || {
+        test_context.with_blueprint_ctx(|ctx, _| {
+            let scalar = ViewProperty::from_archetype_for_view::<ScalarAxis>(&ctx, view_id);
+            let time = ViewProperty::from_archetype_for_view::<TimeAxis>(&ctx, view_id);
+            (
+                scalar
+                    .component_or_empty::<components::Range1D>(
+                        ScalarAxis::descriptor_range().component,
+                    )
+                    .unwrap(),
+                time.component_or_empty::<blueprint::components::TimeRange>(
+                    TimeAxis::descriptor_view_range().component,
+                )
+                .unwrap(),
+            )
+        })
+    };
+
+    let size = egui::vec2(500.0, 300.0);
+    let mut harness = test_context
+        .setup_kittest_for_rendering_ui(size)
+        .with_step_dt(1.0 / 60.0)
+        .build_ui(|ui| test_context.run_with_single_view(ui, view_id));
+    harness.run();
+    assert_eq!(axis_ranges(), (Some(fixed_range), Some(time_range)));
+
+    let axis_pos = egui::pos2(12.0, size.y / 2.0);
+    harness.hover_at(axis_pos);
+    for pressed in [true, false, true, false] {
+        harness.event(egui::Event::PointerButton {
+            pos: axis_pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+    }
+    harness.step();
+
+    assert_eq!(axis_ranges(), (None, Some(time_range)));
+}
 
 #[test]
 pub fn test_blueprint_overrides_and_defaults_with_time_series() {
