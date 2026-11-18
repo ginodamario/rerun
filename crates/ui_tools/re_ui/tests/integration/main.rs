@@ -10,3 +10,4 @@ mod modal_tests;
 mod notification_test;
 mod progress_ring_test;
 mod text_edit_test;
+mod tooltip_test;
