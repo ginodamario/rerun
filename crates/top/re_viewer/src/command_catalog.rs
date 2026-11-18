@@ -93,6 +93,7 @@ impl MenuGroup {
                 Command(Ui(UICommand::ToggleSelectionPanel)),
                 Command(Ui(UICommand::ExpandSelectionPanel)),
                 Command(Recording(RecordingCommand::ToggleTimePanel)),
+                Command(Ui(UICommand::CloseSidePanels)),
                 Command(Ui(UICommand::ToggleAgentPanel)),
                 Separator,
                 Command(Recording(RecordingCommand::OpenAddViewOrContainerDialog)),
