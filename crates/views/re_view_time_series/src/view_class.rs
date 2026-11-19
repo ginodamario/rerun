@@ -92,6 +92,9 @@ pub struct TimeSeriesViewState {
 
     /// Whether line-series data point markers are always displayed.
     pub always_show_line_data_markers: bool,
+
+    /// Latch the gesture on press so releasing Shift before the pointer doesn't start panning.
+    primary_press_with_shift: bool,
 }
 
 impl Default for TimeSeriesViewState {
@@ -105,6 +108,7 @@ impl Default for TimeSeriesViewState {
             plot_transform: None,
             time_per_pixel: 1.0,
             always_show_line_data_markers: false,
+            primary_press_with_shift: false,
         }
     }
 }
@@ -178,7 +182,17 @@ impl ViewClass for TimeSeriesView {
             )
             .control(
                 "Zoom to selection",
-                (MouseButtonText(SELECTION_RECT_ZOOM_BUTTON), "+", "drag"),
+                (
+                    IconText::from_modifiers_and(
+                        os,
+                        egui::Modifiers::SHIFT,
+                        icons::LEFT_MOUSE_CLICK,
+                    ),
+                    "+",
+                    "drag",
+                    "/",
+                    (MouseButtonText(SELECTION_RECT_ZOOM_BUTTON), "+", "drag"),
+                ),
             )
             .control("Move time cursor", MouseButtonText(MOVE_TIME_CURSOR_BUTTON))
             .control(
@@ -684,6 +698,13 @@ impl ViewClass for TimeSeriesView {
             ui.style_mut().visuals.extreme_bg_color = background_color.into();
             let tokens = re_ui::design_tokens_of_visuals(ui.visuals());
 
+            let primary_box_zoom = ui.input(|input| {
+                if input.pointer.primary_pressed() {
+                    state.primary_press_with_shift = input.modifiers.shift;
+                }
+                state.primary_press_with_shift
+                    && (input.pointer.primary_down() || input.pointer.primary_released())
+            });
             let mut plot = Plot::new(plot_id_src)
                 .id(plot_id)
                 .show_grid(**show_grid)
@@ -712,6 +733,12 @@ impl ViewClass for TimeSeriesView {
                 // Suppress egui_plot's built-in tooltip so we can render our own.
                 .show_x(false)
                 .show_y(false);
+
+            if primary_box_zoom {
+                plot = plot
+                    .boxed_zoom_pointer_button(egui::PointerButton::Primary)
+                    .allow_drag(false);
+            }
 
             // Sharing the same cursor is always nice:
             plot = plot.link_cursor(egui::Id::unique(timeline.name()), [true; 2]);
@@ -869,6 +896,7 @@ impl ViewClass for TimeSeriesView {
                 timeline_range,
                 &view_time_range,
                 &mut new_view_time_range,
+                primary_box_zoom,
             );
 
             let fit_both_axes =
@@ -1830,6 +1858,7 @@ fn paint_time_cursor(
     timeline_range: AbsoluteTimeRange,
     view_time_range: &re_sdk_types::blueprint::components::TimeRange,
     new_view_time_range: &mut Option<TimeRange>,
+    primary_box_zoom: bool,
 ) -> Option<(i64, f32)> {
     let mut time = current_time?;
     let time_x_at =
@@ -1848,7 +1877,7 @@ fn paint_time_cursor(
         .expand2(egui::vec2(interact_radius, 0.0));
 
     let pointer_pos = ui.input(|i| i.pointer.hover_pos());
-    let is_near = ui.rect_contains_pointer(line_rect);
+    let is_near = !primary_box_zoom && ui.rect_contains_pointer(line_rect);
 
     if is_near || is_being_dragged {
         ui.ctx()
