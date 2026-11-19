@@ -12,7 +12,7 @@ use re_sdk_types::encodings::{self, TimeRange};
 use re_sdk_types::{DynamicArchetype, ToArrow as _, VisualizableArchetype as _, components};
 use re_test_context::TestContext;
 use re_test_context::VisualizerBlueprintContext as _;
-use re_test_context::external::egui_kittest::SnapshotResults;
+use re_test_context::external::egui_kittest::{Harness, SnapshotResults, kittest::Queryable as _};
 use re_test_viewport::TestContextExt as _;
 use re_view_time_series::TimeSeriesView;
 use re_viewer_context::{BlueprintContext as _, ViewClass as _, ViewId};
@@ -57,23 +57,71 @@ fn double_clicking_scalar_axis_unsets_scalar_range() {
         );
     });
 
-    let axis_ranges = || {
-        test_context.with_blueprint_ctx(|ctx, _| {
-            let scalar = ViewProperty::from_archetype_for_view::<ScalarAxis>(&ctx, view_id);
-            let time = ViewProperty::from_archetype_for_view::<TimeAxis>(&ctx, view_id);
-            (
-                scalar
-                    .component_or_empty::<components::Range1D>(
-                        ScalarAxis::descriptor_range().component,
-                    )
-                    .unwrap(),
-                time.component_or_empty::<blueprint::components::TimeRange>(
-                    TimeAxis::descriptor_view_range().component,
-                )
-                .unwrap(),
-            )
-        })
-    };
+    let size = egui::vec2(500.0, 300.0);
+    let mut harness = test_context
+        .setup_kittest_for_rendering_ui(size)
+        .with_step_dt(1.0 / 60.0)
+        .build_ui(|ui| test_context.run_with_single_view(ui, view_id));
+    harness.run();
+    assert_eq!(
+        axis_ranges(&test_context, view_id),
+        (Some(fixed_range), Some(time_range))
+    );
+
+    double_click_at(&mut harness, egui::pos2(12.0, size.y / 2.0));
+
+    assert_eq!(
+        axis_ranges(&test_context, view_id),
+        (None, Some(time_range))
+    );
+}
+
+#[test]
+fn double_clicking_time_axis_fits_timeline_and_follows_cursor() {
+    check_timeline_fit(
+        egui::pos2(250.0, 286.0),
+        Some(components::Range1D::new(-10.0, 10.0)),
+    );
+}
+
+#[test]
+fn double_clicking_plot_background_fits_both_axes() {
+    check_timeline_fit(egui::pos2(400.0, 200.0), None);
+}
+
+fn check_timeline_fit(click: egui::Pos2, expected_y: Option<components::Range1D>) {
+    let mut test_context = TestContext::new_with_view_class::<TimeSeriesView>();
+    let timeline = Timeline::new_sequence("tick");
+    for tick in [100, 1200] {
+        test_context.log_entity("plot", |builder| {
+            builder.with_archetype_auto_row([(timeline, tick)], &Scalars::single(4.0))
+        });
+    }
+    // The active timeline extends beyond the plotted series at both ends.
+    for tick in [10, 3010] {
+        test_context.log_entity("events", |builder| {
+            builder.with_archetype_auto_row([(timeline, tick)], &archetypes::TextLog::new("event"))
+        });
+    }
+    test_context.set_active_timeline(*timeline.name());
+    test_context.set_time(310_i64);
+
+    let fixed_y = components::Range1D::new(-10.0, 10.0);
+    let view_id = test_context.setup_viewport_blueprint(|ctx, blueprint| {
+        let view = ViewBlueprint::new_with_root_wildcard(TimeSeriesView::identifier());
+        ctx.save_blueprint_archetype(
+            ViewProperty::from_archetype_for_view::<ScalarAxis>(ctx, view.id).blueprint_store_path,
+            &ScalarAxis::new().with_range(fixed_y),
+        );
+        ctx.save_blueprint_archetype(
+            ViewProperty::from_archetype_for_view::<TimeAxis>(ctx, view.id).blueprint_store_path,
+            &TimeAxis::new().with_view_range(TimeRange {
+                start: encodings::TimeRangeBoundary::Absolute(200.into()),
+                end: encodings::TimeRangeBoundary::Absolute(400.into()),
+            }),
+        );
+        blueprint.add_view_at_root(view)
+    });
 
     let size = egui::vec2(500.0, 300.0);
     let mut harness = test_context
@@ -81,21 +129,58 @@ fn double_clicking_scalar_axis_unsets_scalar_range() {
         .with_step_dt(1.0 / 60.0)
         .build_ui(|ui| test_context.run_with_single_view(ui, view_id));
     harness.run();
-    assert_eq!(axis_ranges(), (Some(fixed_range), Some(time_range)));
+    double_click_at(&mut harness, click);
+    harness.run();
 
-    let axis_pos = egui::pos2(12.0, size.y / 2.0);
-    harness.hover_at(axis_pos);
+    let fitted_time_range = TimeRange {
+        start: encodings::TimeRangeBoundary::CursorRelative((-300).into()),
+        end: encodings::TimeRangeBoundary::CursorRelative(2700.into()),
+    };
+    assert_eq!(
+        axis_ranges(&test_context, view_id),
+        (expected_y, Some(fitted_time_range.into()))
+    );
+
+    // As time advances, the window scrolls and the cursor stays at the same screen position.
+    let cursor_label_x = harness.get_by_label("#310").rect().left();
+    test_context.set_time(910_i64);
+    harness.run();
+    assert_eq!(harness.get_by_label("#910").rect().left(), cursor_label_x);
+}
+
+fn axis_ranges(
+    test_context: &TestContext,
+    view_id: ViewId,
+) -> (
+    Option<components::Range1D>,
+    Option<blueprint::components::TimeRange>,
+) {
+    test_context.with_blueprint_ctx(|ctx, _| {
+        let scalar = ViewProperty::from_archetype_for_view::<ScalarAxis>(&ctx, view_id);
+        let time = ViewProperty::from_archetype_for_view::<TimeAxis>(&ctx, view_id);
+        (
+            scalar
+                .component_or_empty::<components::Range1D>(ScalarAxis::descriptor_range().component)
+                .expect("failed to read the scalar axis range"),
+            time.component_or_empty::<blueprint::components::TimeRange>(
+                TimeAxis::descriptor_view_range().component,
+            )
+            .expect("failed to read the time axis range"),
+        )
+    })
+}
+
+fn double_click_at(harness: &mut Harness<'_>, pos: egui::Pos2) {
+    harness.hover_at(pos);
     for pressed in [true, false, true, false] {
         harness.event(egui::Event::PointerButton {
-            pos: axis_pos,
+            pos,
             button: egui::PointerButton::Primary,
             pressed,
             modifiers: egui::Modifiers::NONE,
         });
     }
     harness.step();
-
-    assert_eq!(axis_ranges(), (None, Some(time_range)));
 }
 
 #[test]
