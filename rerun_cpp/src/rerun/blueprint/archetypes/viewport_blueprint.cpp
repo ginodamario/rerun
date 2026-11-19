@@ -27,6 +27,11 @@ namespace rerun::blueprint::archetypes {
                 Descriptor_past_viewer_recommendations
             )
                 .value_or_throw();
+        archetype.state_background =
+            ComponentBatch::empty<rerun::blueprint::components::StateBackground>(
+                Descriptor_state_background
+            )
+                .value_or_throw();
         return archetype;
     }
 } // namespace rerun::blueprint::archetypes

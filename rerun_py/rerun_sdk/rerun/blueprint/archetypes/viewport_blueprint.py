@@ -13,7 +13,7 @@ from ..._baseclasses import (
     Archetype,
     ComponentDescriptor,
 )
-from ...blueprint import components as blueprint_components
+from ...blueprint import components as blueprint_components, encodings as blueprint_encodings
 from ...error_utils import catch_and_log_exceptions
 
 if TYPE_CHECKING:
@@ -40,6 +40,7 @@ class ViewportBlueprint(Archetype):
         auto_layout: encodings.BoolLike | None = None,
         auto_views: encodings.BoolLike | None = None,
         past_viewer_recommendations: encodings.UInt64ArrayLike | None = None,
+        state_background: blueprint_encodings.StateLaneSourceLike | None = None,
     ) -> None:
         """
         Create a new instance of the ViewportBlueprint archetype.
@@ -68,6 +69,8 @@ class ViewportBlueprint(Archetype):
             If you want the viewer from stopping to add views, you should set `auto_views` to `false`.
 
             The viewer uses this to determine whether it should keep adding views.
+        state_background:
+            Color the backgrounds of all time series plots using the phases of this state lane.
 
         """
 
@@ -79,6 +82,7 @@ class ViewportBlueprint(Archetype):
                 auto_layout=auto_layout,
                 auto_views=auto_views,
                 past_viewer_recommendations=past_viewer_recommendations,
+                state_background=state_background,
             )
             return
         self.__attrs_clear__()
@@ -91,6 +95,7 @@ class ViewportBlueprint(Archetype):
             auto_layout=None,
             auto_views=None,
             past_viewer_recommendations=None,
+            state_background=None,
         )
 
     @classmethod
@@ -110,6 +115,7 @@ class ViewportBlueprint(Archetype):
         auto_layout: encodings.BoolLike | None = None,
         auto_views: encodings.BoolLike | None = None,
         past_viewer_recommendations: encodings.UInt64ArrayLike | None = None,
+        state_background: blueprint_encodings.StateLaneSourceLike | None = None,
     ) -> ViewportBlueprint:
         """
         Update only some specific fields of a `ViewportBlueprint`.
@@ -140,6 +146,8 @@ class ViewportBlueprint(Archetype):
             If you want the viewer from stopping to add views, you should set `auto_views` to `false`.
 
             The viewer uses this to determine whether it should keep adding views.
+        state_background:
+            Color the backgrounds of all time series plots using the phases of this state lane.
 
         """
 
@@ -151,6 +159,7 @@ class ViewportBlueprint(Archetype):
                 "auto_layout": auto_layout,
                 "auto_views": auto_views,
                 "past_viewer_recommendations": past_viewer_recommendations,
+                "state_background": state_background,
             }
 
             if clear_unset:
@@ -207,6 +216,14 @@ class ViewportBlueprint(Archetype):
             component_type=blueprint_components.ViewerRecommendationHashBatch._COMPONENT_TYPE,
         )
 
+    @staticmethod
+    def descriptor_state_background() -> ComponentDescriptor:
+        return ComponentDescriptor(
+            "ViewportBlueprint:state_background",
+            archetype=ViewportBlueprint.NAME,
+            component_type=blueprint_components.StateBackgroundBatch._COMPONENT_TYPE,
+        )
+
     root_container: blueprint_components.RootContainerBatch | None = field(
         metadata={"component": True},
         default=None,
@@ -261,6 +278,15 @@ class ViewportBlueprint(Archetype):
     # If you want the viewer from stopping to add views, you should set `auto_views` to `false`.
     #
     # The viewer uses this to determine whether it should keep adding views.
+    #
+    # (Docstring intentionally commented out to hide this field from the docs)
+
+    state_background: blueprint_components.StateBackgroundBatch | None = field(
+        metadata={"component": True},
+        default=None,
+        converter=blueprint_components.StateBackgroundBatch._converter,  # type: ignore[misc]
+    )
+    # Color the backgrounds of all time series plots using the phases of this state lane.
     #
     # (Docstring intentionally commented out to hide this field from the docs)
 

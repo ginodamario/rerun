@@ -46,6 +46,7 @@ row_share.rs linguist-generated=true
 selected_columns.rs linguist-generated=true
 sort_by.rs linguist-generated=true
 sql_filter_expression.rs linguist-generated=true
+state_background.rs linguist-generated=true
 table_layout_kind.rs linguist-generated=true
 tensor_dimension_index_slider.rs linguist-generated=true
 text_log_column.rs linguist-generated=true

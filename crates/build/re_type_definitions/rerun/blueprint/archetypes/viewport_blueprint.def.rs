@@ -42,4 +42,8 @@ pub struct ViewportBlueprint {
     #[rerun(optional)]
     pub past_viewer_recommendations:
         Option<Vec<rerun::blueprint::components::ViewerRecommendationHash>>,
+
+    /// Color the backgrounds of all time series plots using the phases of this state lane.
+    #[rerun(optional)]
+    pub state_background: Option<rerun::blueprint::components::StateBackground>,
 }

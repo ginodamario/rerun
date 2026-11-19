@@ -12,6 +12,8 @@ mod filter_is_not_null;
 mod selected_columns;
 #[path = "sort_by.def.rs"]
 mod sort_by;
+#[path = "state_lane_source.def.rs"]
+mod state_lane_source;
 #[path = "tensor_dimension_index_slider.def.rs"]
 mod tensor_dimension_index_slider;
 #[path = "text_log_column.def.rs"]
@@ -27,6 +29,7 @@ pub use self::filter_by_range::*;
 pub use self::filter_is_not_null::*;
 pub use self::selected_columns::*;
 pub use self::sort_by::*;
+pub use self::state_lane_source::*;
 pub use self::tensor_dimension_index_slider::*;
 pub use self::text_log_column::*;
 pub use self::timeline_column::*;

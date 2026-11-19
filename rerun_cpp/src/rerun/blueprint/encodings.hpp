@@ -10,6 +10,7 @@
 #include "blueprint/encodings/selected_columns.hpp"
 #include "blueprint/encodings/sort_by.hpp"
 #include "blueprint/encodings/sort_direction.hpp"
+#include "blueprint/encodings/state_lane_source.hpp"
 #include "blueprint/encodings/tensor_dimension_index_slider.hpp"
 #include "blueprint/encodings/text_log_column.hpp"
 #include "blueprint/encodings/text_log_column_kind.hpp"

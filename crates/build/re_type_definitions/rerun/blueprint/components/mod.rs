@@ -88,6 +88,8 @@ mod selected_columns;
 mod sort_by;
 #[path = "sql_filter_expression.def.rs"]
 mod sql_filter_expression;
+#[path = "state_background.def.rs"]
+mod state_background;
 #[path = "table_layout_kind.def.rs"]
 mod table_layout_kind;
 #[path = "tensor_dimension_index_slider.def.rs"]
@@ -177,6 +179,7 @@ pub use self::row_share::*;
 pub use self::selected_columns::*;
 pub use self::sort_by::*;
 pub use self::sql_filter_expression::*;
+pub use self::state_background::*;
 pub use self::table_layout_kind::*;
 pub use self::tensor_dimension_index_slider::*;
 pub use self::text_log_column::*;

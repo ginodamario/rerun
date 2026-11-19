@@ -434,7 +434,7 @@ impl ViewClass for TimeSeriesView {
     fn ui(
         &self,
         ctx: &ViewerContext<'_>,
-        _missing_chunk_reporter: &re_viewer_context::MissingChunkReporter,
+        missing_chunk_reporter: &re_viewer_context::MissingChunkReporter,
         ui: &mut egui::Ui,
         state: &mut dyn ViewState,
         query: &ViewQuery<'_>,
@@ -831,6 +831,28 @@ impl ViewClass for TimeSeriesView {
                 let points_per_time = transform.dpos_dvalue_x();
                 let pixels_per_time = ui.ctx().pixels_per_point() as f64 * points_per_time;
                 state.time_per_pixel = 1.0 / pixels_per_time.max(f64::EPSILON);
+            }
+
+            let plot_window = AbsoluteTimeRange::new(
+                (transform.bounds().min()[0].floor() as i64).saturating_add(time_offset),
+                (transform.bounds().max()[0].ceil() as i64).saturating_add(time_offset),
+            );
+            if let Some(bands) = re_view_state_timeline::time_series_background(
+                ctx,
+                query,
+                plot_window,
+                missing_chunk_reporter,
+            ) {
+                for &(range, color) in bands.iter() {
+                    paint_time_range_highlight(
+                        ui,
+                        &response,
+                        &transform,
+                        time_offset,
+                        range,
+                        color,
+                    );
+                }
             }
 
             // Cross-view time-range highlight (e.g. hovered state phase). Only paint

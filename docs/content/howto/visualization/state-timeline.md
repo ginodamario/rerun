@@ -61,6 +61,16 @@ snippet: howto/state_timeline[state_config]
   <source media="(max-width: 1200px)" srcset="https://static.rerun.io/state_timeline/8b56b1d7ec02bb6d45f6115dcba7c4ba8875942b/1200w.png">
 </picture>
 
+## Show state colors behind time series plots
+
+Select the state entity in the State Timeline view and enable **Show as time series background** in its State Visualizer settings.
+For an array of states, choose the zero-based **State instance** to display.
+Every time series plot shows the chosen lane’s successive phases as translucent bands at their timestamps, including when the State Timeline is in another tab.
+Gaps and hidden states leave the plot background clear.
+The blueprint saves the choice.
+To switch lanes, enable the checkbox on another State Visualizer.
+To remove the bands, clear the checkbox on the selected one.
+
 ## Visualize any component as state
 
 You don't have to log [`StateChange`](../../reference/types/archetypes/state_change.md) to use this view. Any component whose data is string-, boolean-, or number-like can drive a lane by **remapping** the visualizer's `StateChange:state` input to read from it instead. This lets you separate how you _model_ your data from how you _visualize_ it. For example, visualizing a robot mode that you logged as a plain string via `AnyValues` or `DynamicArchetype` (the same idea as [Plot any scalar](plot-any-scalar.md), applied to the state slot).
