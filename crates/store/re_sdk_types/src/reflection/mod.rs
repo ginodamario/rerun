@@ -908,7 +908,7 @@ fn generate_component_reflection() -> Result<ComponentReflectionMap, Serializati
         (
             <TooltipMode as Component>::name(),
             ComponentTypeReflection {
-                docstring_md: "Controls how the plot tooltip behaves when hovering over data.\n\n⚠\u{fe0f} **This type is _unstable_ and may change significantly in a way that the data won't be backwards compatible.**",
+                docstring_md: "Controls where the plot shows series values.\n\n⚠\u{fe0f} **This type is _unstable_ and may change significantly in a way that the data won't be backwards compatible.**",
                 deprecation_summary: None,
                 custom_placeholder: Some(TooltipMode::default().to_arrow()?),
                 datatype: TooltipMode::arrow_data_type(),
@@ -921,6 +921,10 @@ fn generate_component_reflection() -> Result<ComponentReflectionMap, Serializati
                     EnumVariantReflection {
                         value: 2,
                         name: "All",
+                    },
+                    EnumVariantReflection {
+                        value: 3,
+                        name: "TimeCursor",
                     },
                 ]),
                 own_chunk: false,
@@ -5757,7 +5761,7 @@ fn generate_archetype_reflection() -> ArchetypeReflectionMap {
                         name: "tooltip_mode",
                         display_name: "Tooltip mode",
                         component_type: "rerun.blueprint.components.TooltipMode".into(),
-                        docstring_md: "How the tooltip behaves when hovering over the plot.",
+                        docstring_md: "Where the plot shows series values.",
                         flags: ArchetypeFieldFlags::UI_EDITABLE,
                     },
                     ArchetypeFieldReflection {

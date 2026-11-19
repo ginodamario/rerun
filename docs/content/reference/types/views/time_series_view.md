@@ -33,7 +33,7 @@ Configures the background of the plot.
 ### `interaction`
 Configures tooltip and data point marker behavior.
 
-* `tooltip_mode`: How the tooltip behaves when hovering over the plot.
+* `tooltip_mode`: Where the plot shows series values.
 * `points_display`: When data point markers are displayed on line series.
 ### `time_ranges`
 Configures which range on each timeline is shown by this view (unless specified differently per entity).

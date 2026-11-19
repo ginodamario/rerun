@@ -22,7 +22,7 @@ namespace rerun::blueprint::archetypes {
     /// ⚠ **This type is _unstable_ and may change significantly in a way that the data won't be backwards compatible.**
     ///
     struct PlotInteraction {
-        /// How the tooltip behaves when hovering over the plot.
+        /// Where the plot shows series values.
         std::optional<ComponentBatch> tooltip_mode;
 
         /// When data point markers are displayed on line series.
@@ -58,7 +58,7 @@ namespace rerun::blueprint::archetypes {
         /// Clear all the fields of a `PlotInteraction`.
         static PlotInteraction clear_fields();
 
-        /// How the tooltip behaves when hovering over the plot.
+        /// Where the plot shows series values.
         PlotInteraction with_tooltip_mode(
             const rerun::blueprint::components::TooltipMode& _tooltip_mode
         ) && {

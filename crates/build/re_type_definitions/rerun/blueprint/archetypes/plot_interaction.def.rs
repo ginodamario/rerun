@@ -7,7 +7,7 @@
 #[rust(derive(Default))]
 #[rerun(state = "unstable")]
 pub struct PlotInteraction {
-    /// How the tooltip behaves when hovering over the plot.
+    /// Where the plot shows series values.
     #[rerun(optional)]
     pub tooltip_mode: Option<rerun::blueprint::components::TooltipMode>,
 

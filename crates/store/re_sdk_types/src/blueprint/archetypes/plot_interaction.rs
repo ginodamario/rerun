@@ -29,7 +29,7 @@ use ::std::borrow::Cow;
 /// ⚠️ **This type is _unstable_ and may change significantly in a way that the data won't be backwards compatible.**
 #[derive(Clone, Debug, Default, ::re_byte_size::SizeBytes)]
 pub struct PlotInteraction {
-    /// How the tooltip behaves when hovering over the plot.
+    /// Where the plot shows series values.
     pub tooltip_mode: Option<SerializedComponentBatch>,
 
     /// When data point markers are displayed on line series.
@@ -198,7 +198,7 @@ impl PlotInteraction {
         }
     }
 
-    /// How the tooltip behaves when hovering over the plot.
+    /// Where the plot shows series values.
     #[inline]
     pub fn with_tooltip_mode(
         mut self,

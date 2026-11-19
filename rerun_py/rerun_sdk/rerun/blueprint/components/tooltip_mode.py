@@ -23,16 +23,19 @@ from enum import Enum
 
 class TooltipMode(Enum):
     """
-    **Component**: Controls how the plot tooltip behaves when hovering over data.
+    **Component**: Controls where the plot shows series values.
 
     ⚠️ **This type is _unstable_ and may change significantly in a way that the data won't be backwards compatible.**
     """
 
     Nearest = 1
-    """Show only the nearest data point to the cursor."""
+    """Show only the nearest data point to the mouse pointer."""
 
     All = 2
     """Show values of all visible series at the hovered time."""
+
+    TimeCursor = 3
+    """Show values of visible series beside the Viewer time cursor."""
 
     @classmethod
     def auto(cls, val: str | int | TooltipMode) -> TooltipMode:
@@ -55,10 +58,15 @@ class TooltipMode(Enum):
         return self.name
 
 
-TooltipModeLike = TooltipMode | Literal["All", "Nearest", "all", "nearest"] | int
+TooltipModeLike = TooltipMode | Literal["All", "Nearest", "TimeCursor", "all", "nearest", "timecursor"] | int
 """A type alias for any TooltipMode-like object."""
 
-TooltipModeArrayLike = TooltipMode | Literal["All", "Nearest", "all", "nearest"] | int | Sequence[TooltipModeLike]
+TooltipModeArrayLike = (
+    TooltipMode
+    | Literal["All", "Nearest", "TimeCursor", "all", "nearest", "timecursor"]
+    | int
+    | Sequence[TooltipModeLike]
+)
 """A type alias for any TooltipMode-like array object."""
 
 

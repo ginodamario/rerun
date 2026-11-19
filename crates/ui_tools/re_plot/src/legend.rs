@@ -40,7 +40,7 @@ impl LegendWidget {
     }
 
     /// Render the legend container overlaid on the given UI.
-    pub fn show(&self, ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) {
+    pub fn show(&self, ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) -> egui::Rect {
         let frame_id = legend_frame_id(self.config.id);
 
         egui::Aligned::new(self.config.position)
@@ -65,7 +65,9 @@ impl LegendWidget {
                                 });
                         });
                     });
-            });
+            })
+            .response
+            .rect
     }
 
     /// High-level API: render legend entries with built-in click-toggle and Alt+click solo/restore.
@@ -97,6 +99,7 @@ impl LegendWidget {
 
         if grouped.is_empty() {
             return LegendOutput {
+                rect: None,
                 hovered_id: None,
                 hidden_ids: ItemIdSet::default(),
             };
@@ -106,7 +109,7 @@ impl LegendWidget {
         let mut toggled_labels: ahash::HashSet<&str> = ahash::HashSet::default();
         let mut focus_label: Option<&str> = None;
 
-        self.show(ui, |ui| {
+        let rect = self.show(ui, |ui| {
             for entry in &grouped {
                 let response = ui.add(entry);
 
@@ -149,6 +152,7 @@ impl LegendWidget {
         };
 
         LegendOutput {
+            rect: Some(rect),
             hovered_id,
             hidden_ids,
         }
@@ -157,6 +161,9 @@ impl LegendWidget {
 
 /// Result of [`LegendWidget::show_entries`].
 pub struct LegendOutput {
+    /// Screen-space rectangle of the legend, if it has entries.
+    pub rect: Option<egui::Rect>,
+
     /// ID of the hovered legend entry, if any.
     pub hovered_id: Option<ItemId>,
 

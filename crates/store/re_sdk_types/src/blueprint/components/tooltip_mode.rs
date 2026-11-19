@@ -23,18 +23,21 @@ use ::re_types_core::SerializationResult;
 use ::re_types_core::{DeserializationError, DeserializationResult};
 use ::std::borrow::Cow;
 
-/// **Component**: Controls how the plot tooltip behaves when hovering over data.
+/// **Component**: Controls where the plot shows series values.
 ///
 /// ⚠️ **This type is _unstable_ and may change significantly in a way that the data won't be backwards compatible.**
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Default, ::re_byte_size::SizeBytes)]
 #[repr(u8)]
 pub enum TooltipMode {
-    /// Show only the nearest data point to the cursor.
-    #[default]
+    /// Show only the nearest data point to the mouse pointer.
     Nearest = 1,
 
     /// Show values of all visible series at the hovered time.
     All = 2,
+
+    /// Show values of visible series beside the Viewer time cursor.
+    #[default]
+    TimeCursor = 3,
 }
 
 impl ::re_types_core::Component for TooltipMode {
@@ -114,6 +117,7 @@ impl std::fmt::Display for TooltipMode {
         match self {
             Self::Nearest => write!(f, "Nearest"),
             Self::All => write!(f, "All"),
+            Self::TimeCursor => write!(f, "TimeCursor"),
         }
     }
 }
@@ -123,14 +127,15 @@ impl ::re_types_core::reflection::Enum for TooltipMode {
 
     #[inline]
     fn variants() -> &'static [Self] {
-        &[Self::Nearest, Self::All]
+        &[Self::Nearest, Self::All, Self::TimeCursor]
     }
 
     #[inline]
     fn docstring_md(self) -> &'static str {
         match self {
-            Self::Nearest => "Show only the nearest data point to the cursor.",
+            Self::Nearest => "Show only the nearest data point to the mouse pointer.",
             Self::All => "Show values of all visible series at the hovered time.",
+            Self::TimeCursor => "Show values of visible series beside the Viewer time cursor.",
         }
     }
 

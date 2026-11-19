@@ -20,17 +20,20 @@ namespace arrow {
 } // namespace arrow
 
 namespace rerun::blueprint::components {
-    /// **Component**: Controls how the plot tooltip behaves when hovering over data.
+    /// **Component**: Controls where the plot shows series values.
     ///
     /// ⚠ **This type is _unstable_ and may change significantly in a way that the data won't be backwards compatible.**
     ///
     enum class TooltipMode : uint8_t {
 
-        /// Show only the nearest data point to the cursor.
+        /// Show only the nearest data point to the mouse pointer.
         Nearest = 1,
 
         /// Show values of all visible series at the hovered time.
         All = 2,
+
+        /// Show values of visible series beside the Viewer time cursor.
+        TimeCursor = 3,
     };
 } // namespace rerun::blueprint::components
 

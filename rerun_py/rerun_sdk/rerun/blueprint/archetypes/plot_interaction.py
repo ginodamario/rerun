@@ -41,7 +41,7 @@ class PlotInteraction(Archetype):
         Parameters
         ----------
         tooltip_mode:
-            How the tooltip behaves when hovering over the plot.
+            Where the plot shows series values.
         points_display:
             When data point markers are displayed on line series.
 
@@ -83,7 +83,7 @@ class PlotInteraction(Archetype):
         clear_unset:
             If true, all unspecified fields will be explicitly cleared.
         tooltip_mode:
-            How the tooltip behaves when hovering over the plot.
+            Where the plot shows series values.
         points_display:
             When data point markers are displayed on line series.
 
@@ -131,7 +131,7 @@ class PlotInteraction(Archetype):
         default=None,
         converter=blueprint_components.TooltipModeBatch._converter,  # type: ignore[misc]
     )
-    # How the tooltip behaves when hovering over the plot.
+    # Where the plot shows series values.
     #
     # (Docstring intentionally commented out to hide this field from the docs)
 
