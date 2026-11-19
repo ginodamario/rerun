@@ -46,6 +46,7 @@
 #include "blueprint/components/selected_columns.hpp"
 #include "blueprint/components/sort_by.hpp"
 #include "blueprint/components/sql_filter_expression.hpp"
+#include "blueprint/components/state_background.hpp"
 #include "blueprint/components/table_layout_kind.hpp"
 #include "blueprint/components/tensor_dimension_index_slider.hpp"
 #include "blueprint/components/text_log_column.hpp"

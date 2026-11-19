@@ -69,6 +69,16 @@ snippet: howto/state_timeline[state_config]
   <source media="(max-width: 1200px)" srcset="https://static.rerun.io/state_timeline/8b56b1d7ec02bb6d45f6115dcba7c4ba8875942b/1200w.png">
 </picture>
 
+### Show state colors behind time series plots
+
+Select the state entity in the State Timeline view and enable **Show as time series background** in its State Visualizer settings.
+For an array of states, choose the zero-based **State instance** to display.
+Every time series plot shows the chosen lane’s successive phases as translucent bands at their timestamps, including when the State Timeline is in another tab.
+Gaps and hidden states leave the plot background clear.
+The blueprint saves the choice.
+To switch lanes, enable the checkbox on another State Visualizer.
+To remove the bands, clear the checkbox on the selected one.
+
 ### Setting up the view via blueprint
 
 The State Timeline view is also created automatically when `StateChange` data is present, but you can also configure it explicitly via the blueprint API:

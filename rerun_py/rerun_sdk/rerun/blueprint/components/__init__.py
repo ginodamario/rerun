@@ -51,6 +51,7 @@ from .row_share import RowShare, RowShareBatch
 from .selected_columns import SelectedColumns, SelectedColumnsBatch
 from .sort_by import SortBy, SortByBatch
 from .sql_filter_expression import SqlFilterExpression, SqlFilterExpressionBatch
+from .state_background import StateBackground, StateBackgroundBatch
 from .table_layout_kind import TableLayoutKind, TableLayoutKindArrayLike, TableLayoutKindBatch, TableLayoutKindLike
 from .tensor_dimension_index_slider import TensorDimensionIndexSlider, TensorDimensionIndexSliderBatch
 from .text_log_column import TextLogColumn, TextLogColumnBatch
@@ -187,6 +188,8 @@ __all__ = [
     "SortByBatch",
     "SqlFilterExpression",
     "SqlFilterExpressionBatch",
+    "StateBackground",
+    "StateBackgroundBatch",
     "TableLayoutKind",
     "TableLayoutKindArrayLike",
     "TableLayoutKindBatch",

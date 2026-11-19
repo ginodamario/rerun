@@ -793,6 +793,19 @@ fn generate_component_reflection() -> Result<ComponentReflectionMap, Serializati
             },
         ),
         (
+            <StateBackground as Component>::name(),
+            ComponentTypeReflection {
+                docstring_md: "The state lane used to color the backgrounds of time series views.\n\n⚠\u{fe0f} **This type is _unstable_ and may change significantly in a way that the data won't be backwards compatible.**",
+                deprecation_summary: None,
+                custom_placeholder: Some(StateBackground::default().to_arrow()?),
+                datatype: StateBackground::arrow_data_type(),
+                encoding: Some("rerun.blueprint.encodings.StateLaneSource"),
+                enum_variants: None,
+                own_chunk: false,
+                verify_arrow_array: StateBackground::verify_arrow_array,
+            },
+        ),
+        (
             <TableLayoutKind as Component>::name(),
             ComponentTypeReflection {
                 docstring_md: "How table records are presented.\n\n⚠\u{fe0f} **This type is _unstable_ and may change significantly in a way that the data won't be backwards compatible.**",
@@ -6397,6 +6410,13 @@ fn generate_archetype_reflection() -> ArchetypeReflectionMap {
                         component_type: "rerun.blueprint.components.ViewerRecommendationHash"
                             .into(),
                         docstring_md: "Hashes of all recommended views the viewer has already added and that should not be added again.\n\nThis is an internal field and should not be set usually.\nIf you want the viewer from stopping to add views, you should set `auto_views` to `false`.\n\nThe viewer uses this to determine whether it should keep adding views.",
+                        flags: ArchetypeFieldFlags::UI_EDITABLE,
+                    },
+                    ArchetypeFieldReflection {
+                        name: "state_background",
+                        display_name: "State background",
+                        component_type: "rerun.blueprint.components.StateBackground".into(),
+                        docstring_md: "Color the backgrounds of all time series plots using the phases of this state lane.",
                         flags: ArchetypeFieldFlags::UI_EDITABLE,
                     },
                 ],

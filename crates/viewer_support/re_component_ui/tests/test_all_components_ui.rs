@@ -189,6 +189,7 @@ fn test_cases(reflection: &Reflection) -> Vec<TestCase> {
             re_sdk_types::blueprint::components::PanelState::name(),
             re_sdk_types::blueprint::components::RootContainer::name(),
             re_sdk_types::blueprint::components::RowShare::name(),
+            re_sdk_types::blueprint::components::StateBackground::name(),
             re_sdk_types::blueprint::components::ViewMaximized::name(),
             re_sdk_types::blueprint::components::ViewOrigin::name(),
             re_sdk_types::blueprint::components::ViewerRecommendationHash::name(),

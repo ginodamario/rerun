@@ -55,6 +55,9 @@ pub struct ViewportBlueprint {
     ///
     /// The viewer uses this to determine whether it should keep adding views.
     pub past_viewer_recommendations: Option<SerializedComponentBatch>,
+
+    /// Color the backgrounds of all time series plots using the phases of this state lane.
+    pub state_background: Option<SerializedComponentBatch>,
 }
 
 impl ViewportBlueprint {
@@ -127,6 +130,20 @@ impl ViewportBlueprint {
             });
         (*DESCRIPTOR).clone()
     }
+
+    /// Returns the [`ComponentDescriptor`] for [`Self::state_background`].
+    ///
+    /// The corresponding component is [`crate::blueprint::components::StateBackground`].
+    #[inline]
+    pub fn descriptor_state_background() -> ComponentDescriptor {
+        static DESCRIPTOR: std::sync::LazyLock<ComponentDescriptor> =
+            std::sync::LazyLock::new(|| ComponentDescriptor {
+                archetype: Some("rerun.blueprint.archetypes.ViewportBlueprint".into()),
+                component: "ViewportBlueprint:state_background".into(),
+                component_type: Some("rerun.blueprint.components.StateBackground".into()),
+            });
+        (*DESCRIPTOR).clone()
+    }
 }
 
 static REQUIRED_COMPONENTS: std::sync::LazyLock<[ComponentDescriptor; 0usize]> =
@@ -135,7 +152,7 @@ static REQUIRED_COMPONENTS: std::sync::LazyLock<[ComponentDescriptor; 0usize]> =
 static RECOMMENDED_COMPONENTS: std::sync::LazyLock<[ComponentDescriptor; 0usize]> =
     std::sync::LazyLock::new(|| []);
 
-static OPTIONAL_COMPONENTS: std::sync::LazyLock<[ComponentDescriptor; 5usize]> =
+static OPTIONAL_COMPONENTS: std::sync::LazyLock<[ComponentDescriptor; 6usize]> =
     std::sync::LazyLock::new(|| {
         [
             ViewportBlueprint::descriptor_root_container(),
@@ -143,10 +160,11 @@ static OPTIONAL_COMPONENTS: std::sync::LazyLock<[ComponentDescriptor; 5usize]> =
             ViewportBlueprint::descriptor_auto_layout(),
             ViewportBlueprint::descriptor_auto_views(),
             ViewportBlueprint::descriptor_past_viewer_recommendations(),
+            ViewportBlueprint::descriptor_state_background(),
         ]
     });
 
-static ALL_COMPONENTS: std::sync::LazyLock<[ComponentDescriptor; 5usize]> =
+static ALL_COMPONENTS: std::sync::LazyLock<[ComponentDescriptor; 6usize]> =
     std::sync::LazyLock::new(|| {
         [
             ViewportBlueprint::descriptor_root_container(),
@@ -154,12 +172,13 @@ static ALL_COMPONENTS: std::sync::LazyLock<[ComponentDescriptor; 5usize]> =
             ViewportBlueprint::descriptor_auto_layout(),
             ViewportBlueprint::descriptor_auto_views(),
             ViewportBlueprint::descriptor_past_viewer_recommendations(),
+            ViewportBlueprint::descriptor_state_background(),
         ]
     });
 
 impl ViewportBlueprint {
-    /// The total number of components in the archetype: 0 required, 0 recommended, 5 optional
-    pub const NUM_COMPONENTS: usize = 5usize;
+    /// The total number of components in the archetype: 0 required, 0 recommended, 6 optional
+    pub const NUM_COMPONENTS: usize = 6usize;
 }
 
 impl ::re_types_core::Archetype for ViewportBlueprint {
@@ -233,12 +252,18 @@ impl ::re_types_core::Archetype for ViewportBlueprint {
                     Self::descriptor_past_viewer_recommendations(),
                 )
             });
+        let state_background = arrays_by_descr
+            .get(&Self::descriptor_state_background())
+            .map(|array| {
+                SerializedComponentBatch::new(array.clone(), Self::descriptor_state_background())
+            });
         Ok(Self {
             root_container,
             maximized,
             auto_layout,
             auto_views,
             past_viewer_recommendations,
+            state_background,
         })
     }
 }
@@ -253,6 +278,7 @@ impl ::re_types_core::AsComponents for ViewportBlueprint {
             self.auto_layout.clone(),
             self.auto_views.clone(),
             self.past_viewer_recommendations.clone(),
+            self.state_background.clone(),
         ]
         .into_iter()
         .flatten()
@@ -272,6 +298,7 @@ impl ViewportBlueprint {
             auto_layout: None,
             auto_views: None,
             past_viewer_recommendations: None,
+            state_background: None,
         }
     }
 
@@ -305,6 +332,10 @@ impl ViewportBlueprint {
             past_viewer_recommendations: Some(SerializedComponentBatch::new(
                 crate::blueprint::components::ViewerRecommendationHash::arrow_empty(),
                 Self::descriptor_past_viewer_recommendations(),
+            )),
+            state_background: Some(SerializedComponentBatch::new(
+                crate::blueprint::components::StateBackground::arrow_empty(),
+                Self::descriptor_state_background(),
             )),
         }
     }
@@ -374,6 +405,17 @@ impl ViewportBlueprint {
             Self::descriptor_past_viewer_recommendations(),
             past_viewer_recommendations,
         );
+        self
+    }
+
+    /// Color the backgrounds of all time series plots using the phases of this state lane.
+    #[inline]
+    pub fn with_state_background(
+        mut self,
+        state_background: impl Into<crate::blueprint::components::StateBackground>,
+    ) -> Self {
+        self.state_background =
+            try_serialize_field(Self::descriptor_state_background(), [state_background]);
         self
     }
 }

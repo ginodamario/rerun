@@ -567,9 +567,7 @@ impl ViewClass for StateTimelineView {
 
         // Publish the hovered phase so other views can highlight the same range.
         if let Some(phase) = hovered_phase {
-            let [r, g, b, _] = phase.color.to_array();
-            #[expect(clippy::disallowed_methods)]
-            let band_color = egui::Color32::from_rgba_unmultiplied(r, g, b, 30);
+            let band_color = crate::background::background_color(phase.color);
             let range = AbsoluteTimeRange::new(
                 phase.start_time,
                 phase

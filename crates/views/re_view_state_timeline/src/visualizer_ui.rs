@@ -12,7 +12,7 @@ use re_viewer_context::external::re_entity_db::InstancePath;
 use re_viewer_context::{DataResultInteractionAddress, Item, MaybeMutRef};
 
 use crate::data::StateValueKind;
-use crate::visualizer::current_state_value_kind;
+use crate::visualizer::current_state_shape;
 
 /// One row in the state configuration editor.
 struct StateMapping {
@@ -92,10 +92,18 @@ pub fn state_config_editor(
 
     let id = ui.make_persistent_id(("state_config", entity_path));
 
+    let shape = current_state_shape(ctx, data_result, instruction);
+    crate::background::background_selection_ui(
+        ui,
+        ctx,
+        data_result,
+        instruction,
+        shape.map_or(0, |(_, count)| count),
+    );
+
     // For boolean lanes, the only meaningful values are `"true"` and `"false"`, so the editor
     // renders a simplified two-row UI; everything else gets the freeform editor.
-    let kind = current_state_value_kind(ctx, data_result, instruction);
-    let is_bool_lane = kind == Some(StateValueKind::Bool);
+    let is_bool_lane = shape.is_some_and(|(kind, _)| kind == StateValueKind::Bool);
 
     let (changes, mappings) = if is_bool_lane {
         render_bool_mapping_rows(ui, entity_path, &values, &labels, &colors, &visible)

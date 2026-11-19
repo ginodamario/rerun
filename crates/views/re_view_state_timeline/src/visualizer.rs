@@ -58,7 +58,7 @@
 use nohash_hasher::IntMap;
 use re_chunk_store::external::arrow::datatypes::DataType;
 use re_chunk_store::{AbsoluteTimeRange, RowId};
-use re_log_types::TimeInt;
+use re_log_types::{TimeInt, TimelineName};
 use re_sdk_types::Archetype as _;
 use re_sdk_types::ArrowString;
 use re_sdk_types::archetypes::{StateChange, StateConfiguration};
@@ -117,12 +117,12 @@ pub fn state_value_kind_from_datatype(dt: &DataType) -> Option<StateValueKind> {
     }
 }
 
-/// Determine the canonical state value kind for the lane addressed by `instruction`.
-pub fn current_state_value_kind(
+/// Post-cast value kind and instance count for the selected instruction at the cursor.
+pub(crate) fn current_state_shape(
     ctx: &ViewContext<'_>,
     data_result: &re_viewer_context::DataResult,
     instruction: &re_viewer_context::VisualizerInstruction,
-) -> Option<StateValueKind> {
+) -> Option<(StateValueKind, usize)> {
     let state_component = StateChange::descriptor_state().component;
     let rules: IntMap<_, ComponentCastRule> =
         std::iter::once((state_component, state_cast_rule as ComponentCastRule)).collect();
@@ -135,8 +135,23 @@ pub fn current_state_value_kind(
         Some(instruction),
         &rules,
     );
-    let arr = result.get_raw_cell(state_component)?;
-    state_value_kind_from_datatype(arr.data_type())
+    if let Some(arr) = result.get_raw_cell(state_component)
+        && !arr.is_empty()
+    {
+        return Some((state_value_kind_from_datatype(arr.data_type())?, arr.len()));
+    }
+    // A cursor before the first state or in a gap still needs an instance picker.
+    let shape = probe_state_shape(
+        ctx,
+        *ctx.viewer_ctx.time_ctrl.timeline_name(),
+        &data_result.entity_path,
+        instruction,
+        state_component,
+    )?;
+    Some((
+        state_value_kind_from_datatype(&shape.value_type)?,
+        shape.instance_count,
+    ))
 }
 
 /// Polymorphic cast rule for the state slot: a thin lookup into [`COMPONENT_CAST_MAP`].
@@ -349,22 +364,15 @@ impl VisualizerSystem for StateVisualizer {
             AbsoluteTimeRange::EVERYTHING
         };
 
-        let builder = LaneGroupBuilder::new(ctx, view_query, &output);
+        let builder =
+            LaneGroupBuilder::new(ctx, view_query.timeline, view_query.latest_at, &output);
 
         let mut groups: Vec<StateLaneGroup> = Vec::new();
 
         for (data_result, instruction) in
             view_query.iter_visualizer_instruction_for(Self::identifier())
         {
-            let visible_time_range = match data_result.query_range() {
-                re_viewer_context::QueryRange::TimeRange(time_range) => {
-                    re_view::resolve_visible_time_range(ctx.viewer_ctx, time_range)
-                }
-
-                // Safety: our `default_query_range` is a time range and the selection panel refuses to
-                // store latest-at as an override, so this shouldn't happen.
-                re_viewer_context::QueryRange::LatestAt => AbsoluteTimeRange::EVERYTHING,
-            };
+            let visible_time_range = visible_time_range(ctx.viewer_ctx, data_result);
 
             // The on-screen window, cut down to the configured range.
             let store_range = view_window.intersection(visible_time_range);
@@ -402,8 +410,20 @@ impl VisualizerSystem for StateVisualizer {
     }
 }
 
+pub(crate) fn visible_time_range(
+    ctx: &re_viewer_context::ViewerContext<'_>,
+    data_result: &re_viewer_context::DataResult,
+) -> AbsoluteTimeRange {
+    match data_result.query_range() {
+        re_viewer_context::QueryRange::TimeRange(range) => {
+            re_view::resolve_visible_time_range(ctx, range)
+        }
+        re_viewer_context::QueryRange::LatestAt => AbsoluteTimeRange::EVERYTHING,
+    }
+}
+
 /// Everything one visualizer instruction contributes to its lane group, as pulled from the store.
-struct LaneSource {
+pub(crate) struct LaneSource {
     /// Post-cast element type of the state column, shared by all its lanes.
     ///
     /// `None` when the entity has no state data at all on this timeline — the group is still shown,
@@ -423,13 +443,33 @@ struct LaneSource {
     clear_events: Vec<(TimeInt, RowId)>,
 }
 
+impl LaneSource {
+    pub(crate) fn lane(&self, instance: usize) -> StateLane {
+        let values = self
+            .rows
+            .iter()
+            .map(|row| {
+                (
+                    row.time,
+                    row.row_id,
+                    row.labels.get(instance).cloned().flatten(),
+                )
+            })
+            .collect();
+        StateLane {
+            phases: build_lane_phases(values, &self.clear_events, &self.state_config),
+        }
+    }
+}
+
 /// Builds the lane groups of one [`StateVisualizer::execute`], holding what they all share.
 ///
 /// One group is built per visualizer instruction, in two steps: [`Self::lane_source`] gathers the
 /// data from the store, [`build_group`] turns it into lanes.
-struct LaneGroupBuilder<'a> {
+pub(crate) struct LaneGroupBuilder<'a> {
     ctx: &'a ViewContext<'a>,
-    view_query: &'a ViewQuery<'a>,
+    timeline: TimelineName,
+    latest_at: TimeInt,
     output: &'a VisualizerExecutionOutput,
 
     /// The state slot is polymorphic on the source datatype: numerics collapse to f64,
@@ -439,14 +479,16 @@ struct LaneGroupBuilder<'a> {
 }
 
 impl<'a> LaneGroupBuilder<'a> {
-    fn new(
+    pub(crate) fn new(
         ctx: &'a ViewContext<'a>,
-        view_query: &'a ViewQuery<'a>,
+        timeline: TimelineName,
+        latest_at: TimeInt,
         output: &'a VisualizerExecutionOutput,
     ) -> Self {
         Self {
             ctx,
-            view_query,
+            timeline,
+            latest_at,
             output,
             cast_rules: std::iter::once((
                 StateChange::descriptor_state().component,
@@ -457,7 +499,7 @@ impl<'a> LaneGroupBuilder<'a> {
     }
 
     /// Query the state changes, styling and `Clear`s for one instruction.
-    fn lane_source(
+    pub(crate) fn lane_source(
         &self,
         data_result: &re_viewer_context::DataResult,
         instruction: &re_viewer_context::VisualizerInstruction,
@@ -475,7 +517,7 @@ impl<'a> LaneGroupBuilder<'a> {
                 .get_or_init(|| {
                     probe_state_shape(
                         self.ctx,
-                        self.view_query.timeline,
+                        self.timeline,
                         &data_result.entity_path,
                         instruction,
                         state_component,
@@ -497,7 +539,7 @@ impl<'a> LaneGroupBuilder<'a> {
         // Including extended bounds means we also query the next state right after the
         // window. Visually, it doesn't matter, but the hover tooltip needs to show when
         // exactly the state ends.
-        let query = re_chunk_store::RangeQuery::new(self.view_query.timeline, store_range)
+        let query = re_chunk_store::RangeQuery::new(self.timeline, store_range)
             .include_extended_bounds(true);
 
         // A state active at the left edge is part of the lane, so we have to bootstrap the state with a latest-at query.
@@ -532,11 +574,11 @@ impl<'a> LaneGroupBuilder<'a> {
         // Configuration is a single style table for the entire lane, selected at the cursor.
         // It's expected to not change as the user pans the independently-controlled view window.
         let config_results = re_view::BlueprintResolvedResults::from((
-            self.view_query.latest_at_query(),
+            re_chunk_store::LatestAtQuery::new(self.timeline, self.latest_at),
             re_view::latest_at_with_blueprint_resolved_data_polymorphic(
                 self.ctx,
                 None,
-                &self.view_query.latest_at_query(),
+                &re_chunk_store::LatestAtQuery::new(self.timeline, self.latest_at),
                 data_result,
                 StateConfiguration::all_component_identifiers(),
                 Some(instruction),
@@ -613,23 +655,7 @@ fn build_group(
     let instance_count = source.instance_count;
 
     let lanes = (0..instance_count)
-        .map(|instance| StateLane {
-            phases: build_lane_phases(
-                source
-                    .rows
-                    .iter()
-                    .map(|row| {
-                        (
-                            row.time,
-                            row.row_id,
-                            row.labels.get(instance).cloned().flatten(),
-                        )
-                    })
-                    .collect(),
-                &source.clear_events,
-                &source.state_config,
-            ),
-        })
+        .map(|instance| source.lane(instance))
         .collect();
 
     StateLaneGroup {

@@ -7,6 +7,7 @@
 #include "../../blueprint/components/auto_layout.hpp"
 #include "../../blueprint/components/auto_views.hpp"
 #include "../../blueprint/components/root_container.hpp"
+#include "../../blueprint/components/state_background.hpp"
 #include "../../blueprint/components/view_maximized.hpp"
 #include "../../blueprint/components/viewer_recommendation_hash.hpp"
 #include "../../collection.hpp"
@@ -52,6 +53,9 @@ namespace rerun::blueprint::archetypes {
         /// The viewer uses this to determine whether it should keep adding views.
         std::optional<ComponentBatch> past_viewer_recommendations;
 
+        /// Color the backgrounds of all time series plots using the phases of this state lane.
+        std::optional<ComponentBatch> state_background;
+
       public:
         /// The name of the archetype as used in `ComponentDescriptor`s.
         static constexpr const char ArchetypeName[] =
@@ -81,6 +85,11 @@ namespace rerun::blueprint::archetypes {
         static constexpr auto Descriptor_past_viewer_recommendations = ComponentDescriptor(
             ArchetypeName, "ViewportBlueprint:past_viewer_recommendations",
             Loggable<rerun::blueprint::components::ViewerRecommendationHash>::ComponentType
+        );
+        /// `ComponentDescriptor` for the `state_background` field.
+        static constexpr auto Descriptor_state_background = ComponentDescriptor(
+            ArchetypeName, "ViewportBlueprint:state_background",
+            Loggable<rerun::blueprint::components::StateBackground>::ComponentType
         );
 
       public:
@@ -159,6 +168,16 @@ namespace rerun::blueprint::archetypes {
             return std::move(*this);
         }
 
+        /// Color the backgrounds of all time series plots using the phases of this state lane.
+        ViewportBlueprint with_state_background(
+            const rerun::blueprint::components::StateBackground& _state_background
+        ) && {
+            state_background =
+                ComponentBatch::from_loggable(_state_background, Descriptor_state_background)
+                    .value_or_throw();
+            return std::move(*this);
+        }
+
         /// Partitions the component data into multiple sub-batches.
         ///
         /// Specifically, this transforms the existing `ComponentBatch` data into `ComponentColumn`s
@@ -173,7 +192,8 @@ namespace rerun::blueprint::archetypes {
                         &maximized,
                         &auto_layout,
                         &auto_views,
-                        &past_viewer_recommendations},
+                        &past_viewer_recommendations,
+                        &state_background},
                        lengths_
             )
                 .value_or_throw();
@@ -188,7 +208,8 @@ namespace rerun::blueprint::archetypes {
                                                              &maximized,
                                                              &auto_layout,
                                                              &auto_views,
-                                                             &past_viewer_recommendations})
+                                                             &past_viewer_recommendations,
+                                                             &state_background})
                 .value_or_throw();
         }
     };
@@ -212,7 +233,8 @@ namespace rerun {
                  &archetype.maximized,
                  &archetype.auto_layout,
                  &archetype.auto_views,
-                 &archetype.past_viewer_recommendations}
+                 &archetype.past_viewer_recommendations,
+                 &archetype.state_background}
             );
         }
     };
