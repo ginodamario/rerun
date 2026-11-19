@@ -184,6 +184,74 @@ fn double_click_at(harness: &mut Harness<'_>, pos: egui::Pos2) {
 }
 
 #[test]
+fn shift_tap_and_drag_zooms_like_secondary_drag() {
+    let zoom = |button, modifiers| {
+        let mut test_context = TestContext::new_with_view_class::<TimeSeriesView>();
+        let timeline = Timeline::log_tick();
+        for tick in [0, 100] {
+            test_context.log_entity("plot", |builder| {
+                builder.with_archetype_auto_row([(timeline, tick)], &Scalars::single(tick as f64))
+            });
+        }
+        test_context.set_active_timeline(*timeline.name());
+        test_context.set_time(80_i64);
+        let view_id = test_context.setup_viewport_blueprint(|_ctx, blueprint| {
+            blueprint.add_view_at_root(ViewBlueprint::new_with_root_wildcard(
+                TimeSeriesView::identifier(),
+            ))
+        });
+        let mut harness = test_context
+            .setup_kittest_for_rendering_ui(egui::vec2(500.0, 300.0))
+            .with_step_dt(1.0 / 60.0)
+            .build_ui(|ui| test_context.run_with_single_view(ui, view_id));
+        harness.run();
+
+        // Start at the time marker to also exercise the competition with cursor dragging.
+        let start = egui::pos2(400.0, 100.0);
+        let end = egui::pos2(150.0, 200.0);
+        let button_event = |pos, pressed, modifiers| egui::Event::PointerButton {
+            pos,
+            button,
+            pressed,
+            modifiers,
+        };
+        harness.hover_at(start);
+        harness.event(egui::Event::ModifiersChanged(modifiers));
+        if button == egui::PointerButton::Primary {
+            // A trackpad tap followed by a held second tap generates a click, then a press.
+            harness.event(button_event(start, true, modifiers));
+            harness.event(button_event(start, false, modifiers));
+        }
+        harness.event(button_event(start, true, modifiers));
+        harness.hover_at(start + egui::vec2(-8.0, 4.0));
+        harness.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+        harness.hover_at(end);
+        harness.step();
+        assert_eq!(
+            axis_ranges(&test_context, view_id),
+            (None, None),
+            "dragging should preview the box before applying the zoom"
+        );
+        if button == egui::PointerButton::Primary {
+            harness.snapshot("shift_drag_box_zoom");
+        }
+
+        harness.event(button_event(end, false, egui::Modifiers::NONE));
+        harness.run();
+        assert_eq!(test_context.time_ctrl.read().time_i64(), Some(80));
+        axis_ranges(&test_context, view_id)
+    };
+
+    let trackpad = zoom(egui::PointerButton::Primary, egui::Modifiers::SHIFT);
+    let mouse = zoom(egui::PointerButton::Secondary, egui::Modifiers::NONE);
+    assert!(
+        trackpad.0.is_some() && trackpad.1.is_some(),
+        "box zoom should set both axis ranges"
+    );
+    assert_eq!(trackpad, mouse);
+}
+
+#[test]
 pub fn test_blueprint_overrides_and_defaults_with_time_series() {
     let mut test_context = TestContext::new_with_view_class::<TimeSeriesView>();
 
