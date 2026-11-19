@@ -17,7 +17,7 @@ use re_sdk_types::blueprint::components::{
     VisualizerInstructionId,
 };
 use re_sdk_types::components::{Color, Range1D, Visible};
-use re_sdk_types::encodings::TimeRange;
+use re_sdk_types::encodings::{TimeInt, TimeRange, TimeRangeBoundary};
 use re_sdk_types::{ComponentBatch as _, ComponentIdentifier, View as _, ViewClassIdentifier};
 use re_ui::{Help, IconText, MouseButtonText, UiExt as _, icons, list_item};
 use re_view::controls::{MOVE_TIME_CURSOR_BUTTON, SELECTION_RECT_ZOOM_BUTTON};
@@ -181,7 +181,14 @@ impl ViewClass for TimeSeriesView {
                 (MouseButtonText(SELECTION_RECT_ZOOM_BUTTON), "+", "drag"),
             )
             .control("Move time cursor", MouseButtonText(MOVE_TIME_CURSOR_BUTTON))
-            .control("Reset view", ("double", icons::LEFT_MOUSE_CLICK))
+            .control(
+                "Fit timeline and follow cursor",
+                ("double", icons::LEFT_MOUSE_CLICK, "X-axis"),
+            )
+            .control(
+                "Fit both axes",
+                ("double", icons::LEFT_MOUSE_CLICK, "background"),
+            )
             .control_separator()
             .control("Hide/show series", (icons::LEFT_MOUSE_CLICK, "legend"))
             .control(
@@ -552,9 +559,8 @@ impl ViewClass for TimeSeriesView {
 
         let recording = ctx.recording();
 
-        let timeline_range = recording
-            .time_range_for(timeline.name())
-            .unwrap_or(AbsoluteTimeRange::EVERYTHING);
+        let recording_time_range = recording.time_range_for(timeline.name());
+        let timeline_range = recording_time_range.unwrap_or(AbsoluteTimeRange::EVERYTHING);
 
         {
             // Get the full time range of data in the store for all visible entity paths.
@@ -616,7 +622,7 @@ impl ViewClass for TimeSeriesView {
 
         let time_axis = ViewProperty::from_archetype::<TimeAxis>(&view_ctx);
 
-        let view_current_time = re_sdk_types::encodings::TimeInt(
+        let view_current_time = TimeInt(
             current_time
                 .unwrap_or_default()
                 .at_least(timeline_range.min.as_i64()),
@@ -684,6 +690,7 @@ impl ViewClass for TimeSeriesView {
                 .grid_color(tokens.plot_grid_color)
                 .grid_fade(tokens.plot_grid_fade)
                 .auto_bounds(false)
+                .allow_double_click_reset(false)
                 .allow_zoom(!zoom_lock)
                 .allow_scroll(!legend_hovered)
                 .custom_x_axes(vec![
@@ -720,9 +727,8 @@ impl ViewClass for TimeSeriesView {
                 }
             }
 
-            let mut plot_double_clicked = false;
             let mut new_view_time_range = None;
-            let plot_left = ui.available_rect_before_wrap().left();
+            let plot_outer_rect = ui.available_rect_before_wrap();
             let egui_plot::PlotResponse {
                 inner: (),
                 response,
@@ -738,27 +744,28 @@ impl ViewClass for TimeSeriesView {
                         re_view::set_time_cursor(ctx, current_time, Some(&view_time_range.0), time);
                 }
 
-                plot_double_clicked = plot_ui.response().double_clicked();
-
                 // Let the user pick x and y ranges from the blueprint:
                 plot_ui.set_plot_bounds_y(y_range);
                 plot_ui.set_plot_bounds_x(x_range);
             });
 
-            // egui_plot exposes the data rectangle, so use its left edge to find the Y axis.
-            // Sense clicks here while egui_plot's axis widget handles drags.
+            // Sense clicks in the axis strips while egui_plot's axis widgets handle drags.
+            let axis_double_clicked = |rect: egui::Rect, id_salt: &str| {
+                rect.is_positive()
+                    && ui
+                        .interact(rect, plot_id.with(id_salt), egui::Sense::CLICK)
+                        .double_clicked()
+            };
+            let x_axis_rect = egui::Rect::from_x_y_ranges(
+                response.rect.x_range(),
+                response.rect.bottom()..=plot_outer_rect.bottom(),
+            );
             let y_axis_rect = egui::Rect::from_x_y_ranges(
-                plot_left..=response.rect.left(),
+                plot_outer_rect.left()..=response.rect.left(),
                 response.rect.y_range(),
             );
-            let y_axis_double_clicked = y_axis_rect.is_positive()
-                && ui
-                    .interact(
-                        y_axis_rect,
-                        plot_id.with("y_axis_click"),
-                        egui::Sense::CLICK,
-                    )
-                    .double_clicked();
+            let x_axis_double_clicked = axis_double_clicked(x_axis_rect, "x_axis_click");
+            let y_axis_double_clicked = axis_double_clicked(y_axis_rect, "y_axis_click");
 
             // Merge per-series finite ranges from visible series (used as the
             // fallback for `ScalarAxis::descriptor_range()`).
@@ -864,70 +871,58 @@ impl ViewClass for TimeSeriesView {
                 &mut new_view_time_range,
             );
 
-            // Can determine whether we're resetting only now since we need to know whether there's a plot item hovered.
-            let is_resetting = plot_double_clicked && hovered_data_result.is_none();
+            let fit_both_axes =
+                response.double_clicked() && hovered_data_result.is_none() && !legend_hovered;
+            let new_x_range = transform_axis_range(transform, 0);
+            if (fit_both_axes || x_axis_double_clicked)
+                && let Some(range) = recording_time_range
+            {
+                new_view_time_range = Some(TimeRange {
+                    start: TimeRangeBoundary::CursorRelative(
+                        TimeInt::from(range.min) - view_current_time,
+                    ),
+                    end: TimeRangeBoundary::CursorRelative(
+                        TimeInt::from(range.max) - view_current_time,
+                    ),
+                });
+            } else if new_view_time_range.is_none() && new_x_range != x_range {
+                new_view_time_range = Some(re_view::recover_relative_boundaries_after_zoom_or_pan(
+                    re_view::time_axis_time_from_plot(new_x_range.start().into(), time_offset),
+                    re_view::time_axis_time_from_plot(new_x_range.end().into(), time_offset),
+                    &view_time_range,
+                    view_current_time,
+                ));
+            }
 
-            if y_axis_double_clicked
-                && scalar_axis
+            if let Some(range) =
+                new_view_time_range.map(re_sdk_types::blueprint::components::TimeRange)
+                && range != view_time_range
+            {
+                time_range_property.save_blueprint_component(
+                    ctx,
+                    &TimeAxis::descriptor_view_range(),
+                    &range,
+                );
+                ui.request_repaint();
+            }
+
+            if fit_both_axes || y_axis_double_clicked {
+                if scalar_axis
                     .component_raw(scalar_range_component.component)
                     .is_some()
-            {
-                scalar_axis.clear_blueprint_component(ctx, scalar_range_component);
-                ui.request_repaint();
-            } else if is_resetting {
-                reset_view(ctx, &time_range_property, &scalar_axis);
-
-                ui.request_repaint(); // Make sure we get another frame with the view reset.
+                {
+                    scalar_axis.clear_blueprint_component(ctx, scalar_range_component);
+                    ui.request_repaint();
+                }
             } else {
-                let unchanged_bounds = egui_plot::PlotBounds::from_min_max(
-                    [x_range.start(), y_range.start()],
-                    [x_range.end(), y_range.end()],
-                );
-
-                if unchanged_bounds != *transform.bounds() || new_view_time_range.is_some() {
-                    if let Some(new_view_time_range) = new_view_time_range
-                        .or_else(|| {
-                            let new_x_range = transform_axis_range(transform, 0);
-
-                            if new_x_range == x_range {
-                                return None;
-                            }
-
-                            Some(re_view::recover_relative_boundaries_after_zoom_or_pan(
-                                re_view::time_axis_time_from_plot(
-                                    new_x_range.start().into(),
-                                    time_offset,
-                                ),
-                                re_view::time_axis_time_from_plot(
-                                    new_x_range.end().into(),
-                                    time_offset,
-                                ),
-                                &view_time_range,
-                                view_current_time,
-                            ))
-                        })
-                        .map(re_sdk_types::blueprint::components::TimeRange)
-                        && view_time_range != new_view_time_range
-                    {
-                        time_range_property.save_blueprint_component(
-                            ctx,
-                            &TimeAxis::descriptor_view_range(),
-                            &new_view_time_range,
-                        );
-                        ui.request_repaint(); // Make sure we get another frame with this new range applied.
-                    }
-
-                    let new_y_range = transform_axis_range(transform, 1);
-
-                    // Write new y_range if it has changed.
-                    if new_y_range != y_range {
-                        scalar_axis.save_blueprint_component(
-                            ctx,
-                            &scalar_range_component,
-                            &new_y_range,
-                        );
-                        ui.request_repaint(); // Make sure we get another frame with this new range applied.
-                    }
+                let new_y_range = transform_axis_range(transform, 1);
+                if new_y_range != y_range {
+                    scalar_axis.save_blueprint_component(
+                        ctx,
+                        &scalar_range_component,
+                        &new_y_range,
+                    );
+                    ui.request_repaint();
                 }
             }
 
@@ -1855,7 +1850,7 @@ fn paint_time_cursor(
 
     let interact_radius = ui.style().interaction.resize_grab_radius_side;
     let line_rect = egui::Rect::from_x_y_ranges(time_x..=time_x, response.rect.y_range())
-        .expand(interact_radius);
+        .expand2(egui::vec2(interact_radius, 0.0));
 
     let pointer_pos = ui.input(|i| i.pointer.hover_pos());
     let is_near = ui.rect_contains_pointer(line_rect);
@@ -1906,11 +1901,6 @@ fn paint_time_cursor(
 
     ui.paint_time_cursor_with_style(ui.painter(), style, time_x, response.rect.y_range());
     Some((time, time_x))
-}
-
-fn reset_view(ctx: &ViewerContext<'_>, time_axis: &ViewProperty, scalar_axis: &ViewProperty) {
-    scalar_axis.reset_blueprint_component(ctx, ScalarAxis::descriptor_range());
-    time_axis.reset_blueprint_component(ctx, TimeAxis::descriptor_view_range());
 }
 
 /// axis = 0 is the x axis
