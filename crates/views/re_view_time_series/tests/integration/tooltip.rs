@@ -1,4 +1,5 @@
-use re_log_types::TimePoint;
+use re_log_types::{TimePoint, Timeline};
+use re_sdk_types::archetypes::{Measurements, Scalars, SeriesLines};
 use re_sdk_types::blueprint::{
     archetypes::{PlotInteraction, PlotLegend},
     components::TooltipMode,
@@ -81,31 +82,111 @@ fn test_tooltip_mode(tooltip_mode: TooltipMode, snapshot_results: &mut SnapshotR
         blueprint.add_view_at_root(view)
     });
 
+    let (snapshot_name, fixed_precision_label) = match tooltip_mode {
+        TooltipMode::Nearest => ("tooltip_nearest", "series_05 5.00 Pa"),
+        TooltipMode::All => ("tooltip_all", "series_00 0.00"),
+        TooltipMode::TimeCursor => unreachable!("this fixture tests mouse hover"),
+    };
+    let size = egui::vec2(500.0, 300.0);
+    for decimals in [None, Some(2)] {
+        test_context.app_options.time_series_tooltip_decimals = decimals;
+        let mut harness = test_context
+            .setup_kittest_for_rendering_ui(size)
+            .build_ui(|ui| test_context.run_with_single_view(ui, view_id));
+
+        harness.hover_at(egui::pos2(size.x * 0.43, size.y * 0.51));
+        harness.run();
+
+        if decimals.is_some() {
+            harness.get_by_label(fixed_precision_label);
+        } else {
+            snapshot_results.add(harness.try_snapshot(snapshot_name));
+        }
+
+        let omitted_series_label = harness.query_by_label_contains("… and 2 more");
+        match tooltip_mode {
+            TooltipMode::Nearest => {
+                assert!(
+                    omitted_series_label.is_none(),
+                    "the nearest tooltip should only show the hovered series"
+                );
+            }
+            TooltipMode::All => assert!(
+                omitted_series_label.is_some(),
+                "the shared tooltip should cap its visible rows and report omitted series"
+            ),
+            TooltipMode::TimeCursor => unreachable!("this fixture tests mouse hover"),
+        }
+    }
+}
+
+#[test]
+fn test_time_cursor_values_follow_timeline() {
+    let mut test_context = TestContext::new_with_view_class::<TimeSeriesView>();
+    test_context.app_options.time_series_tooltip_decimals = Some(0);
+    let timeline = Timeline::log_tick();
+
+    test_context.log_entity("speed", |builder| {
+        builder
+            .with_archetype_auto_row(TimePoint::STATIC, &SeriesLines::new().with_names(["Speed"]))
+    });
+    test_context.log_entity("pressure", |builder| {
+        builder.with_archetype_auto_row(
+            TimePoint::STATIC,
+            &Measurements::update_fields().with_names(["Pressure"]),
+        )
+    });
+    for time in [0_i64, 10] {
+        test_context.log_entity("speed", |builder| {
+            builder.with_archetype_auto_row([(timeline, time)], &Scalars::single(time as f64))
+        });
+        test_context.log_entity("pressure", |builder| {
+            builder.with_archetype_auto_row(
+                [(timeline, time)],
+                &Measurements::new([19.625 - time as f64]).with_units(["Pa"]),
+            )
+        });
+    }
+    test_context.set_active_timeline(*timeline.name());
+    test_context.set_time(3_i64);
+
+    let view_id = test_context.setup_viewport_blueprint(|_ctx, blueprint| {
+        blueprint.add_view_at_root(ViewBlueprint::new_with_root_wildcard(
+            TimeSeriesView::identifier(),
+        ))
+    });
     let size = egui::vec2(500.0, 300.0);
     let mut harness = test_context
         .setup_kittest_for_rendering_ui(size)
         .build_ui(|ui| test_context.run_with_single_view(ui, view_id));
 
-    harness.hover_at(egui::pos2(size.x * 0.43, size.y * 0.51));
+    harness.hover_at(egui::pos2(size.x * 0.75, size.y * 0.5));
     harness.run();
+    harness.get_by_label("#3");
+    harness.get_by_label("Speed 3");
+    harness.get_by_label("Pressure 17 Pa");
 
-    let snapshot_name = match tooltip_mode {
-        TooltipMode::Nearest => "tooltip_nearest",
-        TooltipMode::All => "tooltip_all",
-    };
-    snapshot_results.add(harness.try_snapshot(snapshot_name));
+    harness.remove_cursor();
+    test_context.set_time(8_i64);
+    harness.run();
+    harness.get_by_label("#8");
+    harness.get_by_label("Speed 8");
+    harness.get_by_label("Pressure 12 Pa");
 
-    let omitted_series_label = harness.query_by_label_contains("… and 2 more");
-    match tooltip_mode {
-        TooltipMode::Nearest => {
-            assert!(
-                omitted_series_label.is_none(),
-                "the nearest tooltip should only show the hovered series"
-            );
-        }
-        TooltipMode::All => assert!(
-            omitted_series_label.is_some(),
-            "the shared tooltip should cap its visible rows and report omitted series"
-        ),
-    }
+    let mut snapshots = SnapshotResults::new();
+    snapshots.add(harness.try_snapshot("time_cursor_values"));
+
+    // Drag the plot's time cursor from #8 to #4.
+    let drag_start = egui::pos2(400.0, 145.0);
+    let drag_end = egui::pos2(215.0, 145.0);
+    harness.hover_at(drag_start);
+    harness.run();
+    harness.drag_at(drag_start);
+    harness.run();
+    harness.hover_at(drag_end);
+    harness.run();
+    harness.drop_at(drag_end);
+    harness.run();
+    harness.get_by_label("#4");
+    harness.get_by_label("Speed 4");
 }

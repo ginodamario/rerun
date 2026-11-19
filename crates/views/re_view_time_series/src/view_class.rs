@@ -7,6 +7,7 @@ use re_chunk_store::TimeType;
 use re_format::time::next_grid_tick_magnitude_nanos;
 use re_log_types::external::arrow::datatypes::DataType;
 use re_log_types::{AbsoluteTimeRange, EntityPath};
+use re_plot::tooltip::PlotTooltipStyle;
 use re_sdk_types::archetypes::{Measurements, Scalars, SeriesLines, SeriesPoints};
 use re_sdk_types::blueprint::archetypes::{
     PlotBackground, PlotInteraction, PlotLegend, ScalarAxis, TimeAxis,
@@ -22,9 +23,9 @@ use re_ui::{Help, IconText, MouseButtonText, UiExt as _, icons, list_item};
 use re_view::controls::{MOVE_TIME_CURSOR_BUTTON, SELECTION_RECT_ZOOM_BUTTON};
 use re_view::view_property_ui;
 use re_viewer_context::{
-    BlueprintContext as _, ComponentMatch, DataResultInteractionAddress, DragAndDropFeedback,
-    DragAndDropPayload, IdentifiedViewSystem as _, IndicatedEntities, PerVisualizerType,
-    QueryRange, RecommendedMappings, RecommendedView, RecommendedVisualizers,
+    AppOptions, BlueprintContext as _, ComponentMatch, DataResultInteractionAddress,
+    DragAndDropFeedback, DragAndDropPayload, IdentifiedViewSystem as _, IndicatedEntities,
+    PerVisualizerType, QueryRange, RecommendedMappings, RecommendedView, RecommendedVisualizers,
     SingleRequiredComponentMatch, SystemExecutionOutput, ViewClass, ViewClassExt as _,
     ViewClassRegistryError, ViewContext, ViewQuery, ViewSpawnHeuristics, ViewState,
     ViewStateExt as _, ViewSystemExecutionError, ViewSystemIdentifier, ViewerContext,
@@ -824,17 +825,17 @@ impl ViewClass for TimeSeriesView {
                 re_renderer_draw_data,
             )?;
 
-            // Render the configured tooltip and use its closest series for interaction.
+            // Hover still targets plot items when the readout follows the time cursor.
             let hovered_data_result = (!legend_hovered)
                 .then(|| {
-                    show_time_series_tooltip(
+                    hover_time_series(
                         ui,
                         &response,
                         &transform,
                         &all_plot_series,
                         time_offset,
                         time_type,
-                        timestamp_format,
+                        ctx.app_options(),
                         &plot_item_id_to_data_result_address,
                         tooltip_mode,
                     )
@@ -851,13 +852,14 @@ impl ViewClass for TimeSeriesView {
                 ctx.handle_select_hover_drag_interactions(&response, hovered, false);
             }
 
-            paint_time_cursor(
+            let time_cursor = paint_time_cursor(
                 ctx,
                 ui,
                 &response,
                 &transform,
                 time_offset,
                 current_time,
+                timeline_range,
                 &view_time_range,
                 &mut new_view_time_range,
             );
@@ -930,7 +932,7 @@ impl ViewClass for TimeSeriesView {
             }
 
             // Render our legend overlay and sync visibility with blueprint.
-            if *legend_visible.0 {
+            let legend_rect = if *legend_visible.0 {
                 // Build a map from label → whether any series with that label is globally hovered.
                 // Multiple series can share a label (e.g. /spiral[0] and /spiral[1]), so we OR
                 // across all of them.
@@ -1001,6 +1003,26 @@ impl ViewClass for TimeSeriesView {
 
                 let hidden_items = legend_output.hidden_ids;
                 update_series_visibility_from_legend(ctx, query, &all_plot_series, &hidden_items);
+
+                legend_output.rect
+            } else {
+                None
+            };
+
+            if tooltip_mode == TooltipMode::TimeCursor
+                && let Some((time, time_x)) = time_cursor
+            {
+                show_time_cursor_values(
+                    ui,
+                    response.rect,
+                    &transform,
+                    &all_plot_series,
+                    time,
+                    time_x,
+                    time_type,
+                    ctx.app_options(),
+                    legend_rect,
+                );
             }
 
             Ok::<(), ViewSystemExecutionError>(())
@@ -1263,32 +1285,33 @@ fn all_scalar_mappings(
     )
 }
 
-/// Shows the configured time-series tooltip and returns the closest data result for interaction.
+/// Shows the hover tooltip if configured and finds the closest data result for interaction.
 ///
 /// Returns the hovered data result item for selection/highlighting, or `None` if
 /// no data point is close enough.
 #[expect(clippy::too_many_arguments)]
-fn show_time_series_tooltip(
+fn hover_time_series(
     ui: &egui::Ui,
     response: &egui::Response,
     transform: &egui_plot::PlotTransform,
     all_plot_series: &[&crate::PlotSeries],
     time_offset: i64,
     time_type: TimeType,
-    timestamp_format: re_log_types::TimestampFormat,
+    app_options: &AppOptions,
     plot_item_id_to_data_result_address: &ahash::HashMap<ItemId, DataResultInteractionAddress>,
     tooltip_mode: TooltipMode,
 ) -> Option<re_viewer_context::Item> {
     match tooltip_mode {
-        TooltipMode::Nearest => nearest_data_point_tooltip(
+        TooltipMode::Nearest | TooltipMode::TimeCursor => nearest_data_point_on_hover(
             ui,
             response,
             transform,
             all_plot_series,
             time_offset,
             time_type,
-            timestamp_format,
+            app_options,
             plot_item_id_to_data_result_address,
+            tooltip_mode == TooltipMode::Nearest,
         ),
         TooltipMode::All => all_series_tooltip(
             ui,
@@ -1297,22 +1320,23 @@ fn show_time_series_tooltip(
             all_plot_series,
             time_offset,
             time_type,
-            timestamp_format,
+            app_options,
             plot_item_id_to_data_result_address,
         ),
     }
 }
 
 #[expect(clippy::too_many_arguments)]
-fn nearest_data_point_tooltip(
+fn nearest_data_point_on_hover(
     ui: &egui::Ui,
     response: &egui::Response,
     transform: &egui_plot::PlotTransform,
     all_plot_series: &[&crate::PlotSeries],
     time_offset: i64,
     time_type: TimeType,
-    timestamp_format: re_log_types::TimestampFormat,
+    app_options: &AppOptions,
     plot_item_id_to_data_result_address: &ahash::HashMap<ItemId, DataResultInteractionAddress>,
+    show_tooltip: bool,
 ) -> Option<re_viewer_context::Item> {
     let hover_pos = match response.hover_pos() {
         Some(pos) if response.rect.contains(pos) => pos,
@@ -1369,38 +1393,31 @@ fn nearest_data_point_tooltip(
     let (_, series_idx) = closest?;
     let series = all_plot_series[series_idx];
 
-    // Draw a small dot at the hovered data point (always shown, no delay).
-    let plot_x = (closest_time.saturating_sub(time_offset)) as f64;
-    let point_screen_pos = transform.position_from_point(&PlotPoint::new(plot_x, closest_value));
-    let painter = ui.painter();
-    let series_color = series.color;
-    painter.circle_filled(point_screen_pos, 3.0, series_color);
+    if show_tooltip {
+        let plot_x = (closest_time.saturating_sub(time_offset)) as f64;
+        let point_screen_pos =
+            transform.position_from_point(&PlotPoint::new(plot_x, closest_value));
+        ui.painter()
+            .circle_filled(point_screen_pos, 3.0, series.color);
 
-    // Strip the date to keep the tooltip compact — most recordings don't span midnight.
-    // Formatting still auto-trims trailing zeros (ms → 3 digits, µs → 6, etc.).
-    let time_label = {
-        let tooltip_format = if time_type == TimeType::TimestampNs {
-            timestamp_format.with_date_visibility(re_log_types::DateVisibility::HideDate)
-        } else {
-            timestamp_format
-        };
-        time_type.format(
-            re_log_types::TimeInt::new_temporal(closest_time),
-            tooltip_format,
-        )
-    };
-    let y_value_text = tooltip_series_value(series, closest_value);
-    let display_label = tooltip_series_label(series);
+        let time_label =
+            format_time_for_tooltip(closest_time, time_type, app_options.timestamp_format);
+        let y_value_text = tooltip_series_value(
+            series,
+            closest_value,
+            app_options.time_series_tooltip_decimals,
+        );
+        let display_label = tooltip_series_label(series);
 
-    re_plot::tooltip::show_plot_tooltip(
-        ui,
-        response,
-        series.id(),
-        &time_label,
-        &display_label,
-        &y_value_text,
-        series_color,
-    );
+        PlotTooltipStyle::Compact.show_at_pointer(
+            ui,
+            response,
+            series.id(),
+            &time_label,
+            [(display_label.as_str(), y_value_text.as_str(), series.color)],
+            0,
+        );
+    }
 
     // Map the hovered series to a data result for selection/highlighting.
     plot_item_id_to_data_result_address
@@ -1452,32 +1469,25 @@ struct TooltipSample {
     distance_sq: f32,
 }
 
-fn tooltip_value_at_hover(
-    points: &[(i64, f64)],
-    kind: PlotSeriesKind,
-    hover_time: i64,
-) -> Option<f64> {
-    let index = match points.binary_search_by_key(&hover_time, |&(time, _)| time) {
-        Ok(index) => return Some(points[index].1),
-        Err(index) => index,
-    };
-
-    match kind {
-        PlotSeriesKind::Continuous | PlotSeriesKind::Stepped(_) => {
-            if index == 0 {
-                points.first().map(|(_, value)| *value)
-            } else if index == points.len() {
-                points.last().map(|(_, value)| *value)
-            } else {
-                let (time0, value0) = points[index - 1];
-                let (time1, value1) = points[index];
-                Some(interpolated_series_value(
-                    kind, hover_time, time0, value0, time1, value1,
-                ))
+fn series_value_at_time(points: &[(i64, f64)], kind: PlotSeriesKind, time: i64) -> Option<f64> {
+    let value = match points.binary_search_by_key(&time, |&(sample_time, _)| sample_time) {
+        Ok(index) => points[index].1,
+        Err(index)
+            if matches!(
+                kind,
+                PlotSeriesKind::Continuous | PlotSeriesKind::Stepped(_)
+            ) =>
+        {
+            let &(time0, value0) = points.get(index.checked_sub(1)?)?;
+            let &(time1, value1) = points.get(index)?;
+            if !value0.is_finite() || !value1.is_finite() {
+                return None;
             }
+            interpolated_series_value(kind, time, time0, value0, time1, value1)
         }
-        PlotSeriesKind::Scatter(_) | PlotSeriesKind::Clear => None,
-    }
+        Err(_) => return None,
+    };
+    value.is_finite().then_some(value)
 }
 
 fn tooltip_sample_at_hover(
@@ -1487,14 +1497,9 @@ fn tooltip_sample_at_hover(
     transform: &egui_plot::PlotTransform,
     time_offset: i64,
 ) -> Option<TooltipSample> {
-    let index = series
-        .points
-        .binary_search_by_key(&hover_time, |&(time, _)| time)
-        .unwrap_or_else(|index| index);
-
     let sample = match series.kind {
         PlotSeriesKind::Continuous | PlotSeriesKind::Stepped(_) => {
-            let value = tooltip_value_at_hover(&series.points, series.kind, hover_time)?;
+            let value = series_value_at_time(&series.points, series.kind, hover_time)?;
             let marker_point = transform.position_from_point(&PlotPoint::new(
                 (hover_time.saturating_sub(time_offset)) as f64,
                 value,
@@ -1514,6 +1519,10 @@ fn tooltip_sample_at_hover(
 
             const SAMPLE_PROXIMITY: f32 = 16.0;
 
+            let index = series
+                .points
+                .binary_search_by_key(&hover_time, |&(time, _)| time)
+                .unwrap_or_else(|index| index);
             let candidate_indices = [index.saturating_sub(1), index.min(series.points.len() - 1)];
             let mut closest_sample = None;
             for candidate_index in candidate_indices {
@@ -1570,12 +1579,16 @@ fn tooltip_series_label(series: &crate::PlotSeries) -> String {
     }
 }
 
-fn tooltip_series_value(series: &crate::PlotSeries, value: f64) -> String {
-    let value = re_format::format_f64(value);
-    series
-        .unit
-        .as_ref()
-        .map_or_else(|| value.clone(), |unit| format!("{value} {unit}"))
+fn tooltip_series_value(series: &crate::PlotSeries, value: f64, decimals: Option<u8>) -> String {
+    let value = match decimals {
+        Some(decimals) => format!("{value:.precision$}", precision = usize::from(decimals)),
+        None => re_format::format_f64(value),
+    };
+    if let Some(unit) = &series.unit {
+        format!("{value} {unit}")
+    } else {
+        value
+    }
 }
 
 #[expect(clippy::too_many_arguments)]
@@ -1586,7 +1599,7 @@ fn all_series_tooltip(
     all_plot_series: &[&crate::PlotSeries],
     time_offset: i64,
     time_type: TimeType,
-    timestamp_format: re_log_types::TimestampFormat,
+    app_options: &AppOptions,
     plot_item_id_to_data_result_address: &ahash::HashMap<ItemId, DataResultInteractionAddress>,
 ) -> Option<re_viewer_context::Item> {
     re_tracing::profile_function!();
@@ -1634,7 +1647,11 @@ fn all_series_tooltip(
         if rows.len() < MAX_TOOLTIP_ROWS {
             rows.push((
                 tooltip_series_label(series),
-                tooltip_series_value(series, sample.value),
+                tooltip_series_value(
+                    series,
+                    sample.value,
+                    app_options.time_series_tooltip_decimals,
+                ),
                 series.color,
             ));
         }
@@ -1644,9 +1661,9 @@ fn all_series_tooltip(
         return None;
     }
 
-    let time_label = format_time_for_tooltip(hover_time, time_type, timestamp_format);
+    let time_label = format_time_for_tooltip(hover_time, time_type, app_options.timestamp_format);
     let num_omitted_rows = num_displayed_series.saturating_sub(rows.len());
-    re_plot::tooltip::show_plot_tooltip_rows(
+    PlotTooltipStyle::Compact.show_at_pointer(
         ui,
         response,
         response.id.with("all_series"),
@@ -1675,6 +1692,106 @@ fn format_time_for_tooltip(
         timestamp_format
     };
     time_type.format(re_log_types::TimeInt::new_temporal(time), tooltip_format)
+}
+
+#[expect(clippy::too_many_arguments)]
+fn show_time_cursor_values(
+    ui: &mut egui::Ui,
+    plot_rect: egui::Rect,
+    transform: &egui_plot::PlotTransform,
+    all_plot_series: &[&crate::PlotSeries],
+    time: i64,
+    time_x: f32,
+    time_type: TimeType,
+    app_options: &AppOptions,
+    legend_rect: Option<egui::Rect>,
+) {
+    let plot_rect = plot_rect.intersect(ui.clip_rect());
+    if !plot_rect.x_range().contains(time_x) {
+        return;
+    }
+
+    let gap = f32::from(ui.tokens().view_padding());
+    let mut readout_rect = plot_rect.shrink(gap);
+    let align = if time_x <= readout_rect.center().x {
+        readout_rect.min.x = time_x + gap;
+        egui::Align2::LEFT_CENTER
+    } else {
+        readout_rect.max.x = time_x - gap;
+        egui::Align2::RIGHT_CENTER
+    };
+
+    if let Some(legend_rect) = legend_rect
+        && readout_rect.intersects(legend_rect)
+    {
+        if legend_rect.center().y < plot_rect.center().y {
+            readout_rect.min.y = legend_rect.bottom() + gap;
+        } else {
+            readout_rect.max.y = legend_rect.top() - gap;
+        }
+    }
+    let row_spacing = ui.tokens().text_to_icon_padding();
+    let row_height = ui.text_style_height(&egui::TextStyle::Body) + row_spacing;
+    let header_height = row_height + row_spacing;
+    let row_capacity = ((readout_rect.height() - header_height) / row_height) as usize;
+    if readout_rect.width() < 40.0 || row_capacity < 2 {
+        return;
+    }
+
+    let painter = ui.painter().with_clip_rect(plot_rect);
+    let mut rows = Vec::new();
+    let mut displayed_series = ahash::HashSet::default();
+    for &series in all_plot_series {
+        if !series.visible || matches!(series.kind, PlotSeriesKind::Clear) {
+            continue;
+        }
+        let Some(value) = series_value_at_time(&series.points, series.kind, time) else {
+            continue;
+        };
+        if !displayed_series.insert(series.id()) {
+            continue;
+        }
+
+        let marker = egui::pos2(time_x, transform.position_from_point_y(value));
+        if plot_rect.contains(marker) && !legend_rect.is_some_and(|rect| rect.contains(marker)) {
+            painter.circle_filled(marker, 3.0, series.color);
+        }
+        if rows.len() < row_capacity {
+            rows.push((
+                tooltip_series_label(series),
+                tooltip_series_value(series, value, app_options.time_series_tooltip_decimals),
+                series.color,
+            ));
+        }
+    }
+
+    if rows.is_empty() {
+        return;
+    }
+    if displayed_series.len() > rows.len() {
+        // Use the final row for the omitted series count when the values do not all fit.
+        rows.pop();
+    }
+
+    let mut overlay = ui.new_child(
+        egui::UiBuilder::new()
+            .id_salt("time_cursor_values")
+            .max_rect(readout_rect)
+            .layout(egui::Layout::top_down(egui::Align::Min))
+            .sense(egui::Sense::empty()),
+    );
+    overlay.set_clip_rect(plot_rect);
+    overlay.spacing_mut().item_spacing.y = row_spacing;
+    overlay.style_mut().interaction.selectable_labels = false;
+    egui::Aligned::new(align).show(&mut overlay, |ui| {
+        PlotTooltipStyle::Compact.show_rows(
+            ui,
+            &format_time_for_tooltip(time, time_type, app_options.timestamp_format),
+            rows.iter()
+                .map(|(label, value, color)| (label.as_str(), value.as_str(), *color)),
+            displayed_series.len() - rows.len(),
+        );
+    });
 }
 
 fn paint_time_range_highlight(
@@ -1711,6 +1828,8 @@ fn paint_time_range_highlight(
     );
 }
 
+/// Paints the time cursor and returns the time and screen position of the visible line.
+#[expect(clippy::too_many_arguments)]
 fn paint_time_cursor(
     ctx: &ViewerContext<'_>,
     ui: &egui::Ui,
@@ -1718,30 +1837,28 @@ fn paint_time_cursor(
     transform: &egui_plot::PlotTransform,
     time_offset: i64,
     current_time: Option<i64>,
+    timeline_range: AbsoluteTimeRange,
     view_time_range: &re_sdk_types::blueprint::components::TimeRange,
     new_view_time_range: &mut Option<TimeRange>,
-) {
-    // Decide if the time cursor should be displayed, and if so where:
-    let time_x = current_time
-        .map(|current_time| (current_time.saturating_sub(time_offset)) as f64)
-        .filter(|&x| {
-            // only display the time cursor when it's actually above the plot area
-            transform.bounds().min()[0] <= x && x <= transform.bounds().max()[0]
-        })
-        .map(|x| transform.position_from_point(&PlotPoint::new(x, 0.0)).x);
+) -> Option<(i64, f32)> {
+    let mut time = current_time?;
+    let time_x_at =
+        |time: i64| transform.position_from_point_x(time.saturating_sub(time_offset) as f64);
+    let mut time_x = time_x_at(time);
 
-    let Some(mut time_x) = time_x else {
-        return;
-    };
+    let time_drag_id = ui.make_persistent_id("time_drag");
+    let is_being_dragged = ui.is_being_dragged(time_drag_id);
+    let plot_x_range = response.rect.x_range();
+    if !is_being_dragged && !plot_x_range.contains(time_x) {
+        return None;
+    }
 
     let interact_radius = ui.style().interaction.resize_grab_radius_side;
     let line_rect = egui::Rect::from_x_y_ranges(time_x..=time_x, response.rect.y_range())
         .expand(interact_radius);
 
-    let time_drag_id = ui.make_persistent_id("time_drag");
     let pointer_pos = ui.input(|i| i.pointer.hover_pos());
     let is_near = ui.rect_contains_pointer(line_rect);
-    let is_being_dragged = ui.is_being_dragged(time_drag_id);
 
     if is_near || is_being_dragged {
         ui.ctx()
@@ -1766,13 +1883,16 @@ fn paint_time_cursor(
                 .value_from_position(pointer_pos + aim_radius * Vec2::X)
                 .x,
         );
-        let new_time = time_offset + new_offset_time.round() as i64;
-
-        // Avoid frame-delay:
-        time_x = pointer_pos.x;
+        let new_time = time_offset.saturating_add(new_offset_time.round() as i64);
+        time = new_time.clamp(timeline_range.min.as_i64(), timeline_range.max.as_i64());
+        time_x = time_x_at(time);
 
         *new_view_time_range =
-            re_view::set_time_cursor(ctx, current_time, Some(&view_time_range.0), new_time.into());
+            re_view::set_time_cursor(ctx, current_time, Some(&view_time_range.0), time.into());
+    }
+
+    if !plot_x_range.contains(time_x) {
+        return None;
     }
 
     let highlighted = is_near || is_being_dragged;
@@ -1785,6 +1905,7 @@ fn paint_time_cursor(
     };
 
     ui.paint_time_cursor_with_style(ui.painter(), style, time_x, response.rect.y_range());
+    Some((time, time_x))
 }
 
 fn reset_view(ctx: &ViewerContext<'_>, time_axis: &ViewProperty, scalar_axis: &ViewProperty) {
@@ -2255,7 +2376,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tooltip_value_at_hover_uses_exact_finite_sample() {
+    fn test_series_value_at_time_uses_exact_finite_sample() {
         let points = [(0, f64::NAN), (1, 5.0), (2, f64::NAN)];
 
         for kind in [
@@ -2264,7 +2385,7 @@ mod tests {
             PlotSeriesKind::Stepped(StepMode::Before),
             PlotSeriesKind::Stepped(StepMode::Mid),
         ] {
-            assert_eq!(tooltip_value_at_hover(&points, kind, 1), Some(5.0));
+            assert_eq!(series_value_at_time(&points, kind, 1), Some(5.0));
         }
     }
 

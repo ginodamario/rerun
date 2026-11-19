@@ -65,6 +65,9 @@ pub struct AppOptions {
     #[serde(rename = "timestamp_format")]
     pub timestamp_format: TimestampFormat,
 
+    /// Fixed decimal places for time series tooltip values, or automatic precision when unset.
+    pub time_series_tooltip_decimals: Option<u8>,
+
     /// Video decoding options.
     pub video: VideoOptions,
 
@@ -134,6 +137,8 @@ impl AppOptions {
             blueprint_gc: true,
 
             timestamp_format: TimestampFormat::default(),
+
+            time_series_tooltip_decimals: None,
 
             video: Default::default(),
 

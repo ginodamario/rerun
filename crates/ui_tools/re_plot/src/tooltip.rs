@@ -27,28 +27,123 @@ pub fn show_plot_tooltip_rows<'a>(
     rows: impl IntoIterator<Item = (&'a str, &'a str, egui::Color32)>,
     omitted_rows: usize,
 ) {
-    plot_tooltip(ui, response, id_salt).show(|ui| {
+    PlotTooltipStyle::Labeled.show_at_pointer(ui, response, id_salt, header, rows, omitted_rows);
+}
+
+/// Appearance of plot value readouts.
+#[derive(Clone, Copy)]
+pub enum PlotTooltipStyle {
+    /// Framed popup with a swatch, series name, and value.
+    Labeled,
+
+    /// Transparent overlay with a swatch and value.
+    Compact,
+}
+
+impl PlotTooltipStyle {
+    /// Shows the readout next to the pointer using the plot tooltip delay.
+    pub fn show_at_pointer<'a>(
+        self,
+        ui: &egui::Ui,
+        response: &egui::Response,
+        id_salt: impl egui::AsIdSalt,
+        header: &str,
+        rows: impl IntoIterator<Item = (&'a str, &'a str, egui::Color32)>,
+        omitted_rows: usize,
+    ) {
+        let mut tooltip = plot_tooltip(ui, response, id_salt);
+        if matches!(self, Self::Compact) {
+            tooltip.popup = tooltip.popup.frame(egui::Frame::NONE);
+        }
+        tooltip.show(|ui| self.show_rows(ui, header, rows, omitted_rows));
+    }
+
+    /// Draws the time or index header, series values, and omitted-row count.
+    pub fn show_rows<'a>(
+        self,
+        ui: &mut egui::Ui,
+        header: &str,
+        rows: impl IntoIterator<Item = (&'a str, &'a str, egui::Color32)>,
+        omitted_rows: usize,
+    ) {
         let tokens = ui.tokens();
 
-        ui.label(
-            egui::RichText::new(header)
-                .size(DesignTokens::combo_item_small_font_size())
-                .color(tokens.text_default),
+        ui.add(
+            egui::Label::new(
+                egui::RichText::new(header)
+                    .size(DesignTokens::combo_item_small_font_size())
+                    .color(tokens.text_default),
+            )
+            .truncate(),
         );
 
         ui.add_space(tokens.text_to_icon_padding());
 
         for (label, value, color) in rows {
-            plot_tooltip_label_value(ui, label, value, color);
+            self.value_row(ui, label, value, color);
         }
 
         if omitted_rows > 0 {
-            ui.label(
-                egui::RichText::new(format!("… and {omitted_rows} more"))
-                    .color(tokens.list_item_noninteractive_text),
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(format!("… and {omitted_rows} more"))
+                        .color(tokens.list_item_noninteractive_text),
+                )
+                .truncate(),
             );
         }
-    });
+    }
+
+    fn value_row(
+        self,
+        ui: &mut egui::Ui,
+        label_text: &str,
+        value_text: &str,
+        color: egui::Color32,
+    ) {
+        const MAX_WIDTH: f32 = 500.0;
+        const SWATCH_GAP: f32 = 6.0;
+        const LABEL_VALUE_GAP: f32 = 16.0;
+
+        let tokens = ui.tokens();
+
+        let swatch = LegendSwatch {
+            color,
+            visible: true,
+        }
+        .atom();
+        let value = egui::RichText::new(value_text).color(tokens.list_item_strong_text);
+        let atoms = match self {
+            Self::Labeled => {
+                let label = egui::RichText::new(label_text)
+                    .color(tokens.list_item_noninteractive_text)
+                    .atom_shrink(true);
+                let spacer =
+                    Atom::default().atom_size(egui::vec2(LABEL_VALUE_GAP - SWATCH_GAP * 2.0, 0.0));
+                egui::Atoms::new((swatch, label, spacer, value))
+            }
+            Self::Compact => egui::Atoms::new((swatch, value)),
+        };
+
+        let width = ui.available_width().min(MAX_WIDTH);
+        ui.set_max_width(width);
+
+        let atom_layout = WidgetAtom::new(atoms)
+            .gap(SWATCH_GAP)
+            .max_width(width)
+            .sense(egui::Sense::hover())
+            .wrap_mode(TextWrapMode::Truncate)
+            .allocate(ui);
+
+        atom_layout.response.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                egui::Role::Label,
+                ui.is_enabled(),
+                format!("{label_text} {value_text}"),
+            )
+        });
+        atom_layout.paint(ui);
+    }
 }
 
 /// Creates a plot tooltip for the given response with Rerun's plot tooltip settings.
@@ -87,36 +182,5 @@ pub fn plot_tooltip_label_value(
     value_text: &str,
     color: egui::Color32,
 ) {
-    const MAX_WIDTH: f32 = 500.0;
-    const SWATCH_GAP: f32 = 6.0;
-    const LABEL_VALUE_GAP: f32 = 16.0;
-
-    let tokens = ui.tokens();
-
-    let label = egui::RichText::new(label_text)
-        .color(tokens.list_item_noninteractive_text)
-        .atom_shrink(true);
-    let value = egui::RichText::new(value_text).color(tokens.list_item_strong_text);
-
-    let atoms = (
-        LegendSwatch {
-            color,
-            visible: true,
-        }
-        .atom(),
-        label,
-        Atom::default().atom_size(egui::vec2(LABEL_VALUE_GAP - SWATCH_GAP * 2.0, 0.0)),
-        value,
-    );
-
-    ui.set_max_width(MAX_WIDTH);
-
-    let atom_layout = WidgetAtom::new(atoms)
-        .gap(SWATCH_GAP)
-        .max_width(MAX_WIDTH)
-        .sense(egui::Sense::hover())
-        .wrap_mode(TextWrapMode::Truncate)
-        .allocate(ui);
-
-    atom_layout.paint(ui);
+    PlotTooltipStyle::Labeled.value_row(ui, label_text, value_text, color);
 }

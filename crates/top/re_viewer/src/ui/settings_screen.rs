@@ -104,6 +104,7 @@ fn settings_screen_ui_impl(
         blueprint_gc: _,               // not yet exposed
         visualizer_limits_enabled,
         timestamp_format,
+        time_series_tooltip_decimals,
         video,
         mapbox_access_token,
         memory_limit,
@@ -167,6 +168,27 @@ fn settings_screen_ui_impl(
 
     ui.collapsing_header("Timestamp format", false, |ui| {
         time_format_section_ui(ui, timestamp_format);
+    });
+
+    ui.horizontal(|ui| {
+        let label = ui.label("Time series tooltip decimal places");
+        egui::ComboBox::from_id_salt("time_series_tooltip_decimals")
+            .selected_text(
+                time_series_tooltip_decimals
+                    .map_or_else(|| "Automatic".to_owned(), |decimals| decimals.to_string()),
+            )
+            .show_ui(ui, |ui| {
+                ui.selectable_value(time_series_tooltip_decimals, None, "Automatic");
+                for decimals in 0..=f64::DIGITS as u8 {
+                    ui.selectable_value(
+                        time_series_tooltip_decimals,
+                        Some(decimals),
+                        decimals.to_string(),
+                    );
+                }
+            })
+            .response
+            .labelled_by(label.id);
     });
 
     separator_with_some_space(ui);
