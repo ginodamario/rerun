@@ -222,6 +222,7 @@ impl CommandKind {
                 | RecordingCommandKind::ResetBlueprint
                 | RecordingCommandKind::ToggleTimePanel
                 | RecordingCommandKind::TogglePlayPause
+                | RecordingCommandKind::JumpToTime
                 | RecordingCommandKind::ToggleReferenceCursor
                 | RecordingCommandKind::SeekToPreviousEvent
                 | RecordingCommandKind::SeekToNextEvent
@@ -330,6 +331,7 @@ impl CommandKind {
                 | RecordingCommandKind::OpenAddViewOrContainerDialog
                 | RecordingCommandKind::ToggleTimePanel
                 | RecordingCommandKind::TogglePlayPause
+                | RecordingCommandKind::JumpToTime
                 | RecordingCommandKind::ToggleReferenceCursor
                 | RecordingCommandKind::SeekToPreviousEvent
                 | RecordingCommandKind::SeekToNextEvent
@@ -446,6 +448,7 @@ impl CommandKind {
                 | RecordingCommandKind::OpenAddViewOrContainerDialog
                 | RecordingCommandKind::ToggleTimePanel
                 | RecordingCommandKind::TogglePlayPause
+                | RecordingCommandKind::JumpToTime
                 | RecordingCommandKind::ToggleReferenceCursor
                 | RecordingCommandKind::SeekToPreviousEvent
                 | RecordingCommandKind::SeekToNextEvent

@@ -9,8 +9,8 @@ use re_data_ui::DataUi as _;
 use re_entity_db::InstancePath;
 use re_entity_db::entity_db::RedapConnectionState;
 use re_log_types::{
-    AbsoluteTimeRange, AbsoluteTimeRangeF, ApplicationId, ComponentPath, EntityPath, TimeInt,
-    TimeReal,
+    AbsoluteTimeRange, AbsoluteTimeRangeF, ApplicationId, ComponentPath, EntityPath, StoreId,
+    TimeInt, TimeReal, TimelineName, TimestampFormat,
 };
 use re_sdk_types::ComponentIdentifier;
 use re_sdk_types::blueprint::components::PanelState;
@@ -22,9 +22,9 @@ use re_ui::{
 };
 use re_viewer_context::viewer_url::ViewerUrl;
 use re_viewer_context::{
-    AppContext, AppOptions, CollapseScope, HoverHighlight, Item, ItemCollection, ItemContext,
-    StoreViewContext, SystemCommand, SystemCommandSender as _, TimeControl, TimeControlCommand,
-    TimeView, UiLayout, ViewerContext, VisitorControlFlow,
+    ActiveStoreContext, AppContext, CollapseScope, HoverHighlight, Item, ItemCollection,
+    ItemContext, RecordingCommandKind, StoreViewContext, SystemCommand, SystemCommandSender as _,
+    TimeControl, TimeControlCommand, TimeView, UiLayout, ViewerContext, VisitorControlFlow,
 };
 use re_viewport_blueprint::ViewportBlueprint;
 
@@ -1424,7 +1424,7 @@ impl TimePanel {
                     self.time_control_ui
                         .timeline_selector_ui(time_ctrl, db, ui, time_commands);
 
-                    self.current_time_ui(store_ctx.app_options, time_ctrl, ui, time_commands);
+                    self.current_time_ui(store_ctx, ui, time_commands);
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         help_button(ui);
@@ -1440,7 +1440,7 @@ impl TimePanel {
             self.time_control_ui
                 .playback_speed_ui(time_ctrl, ui, time_commands);
             self.time_control_ui.fps_ui(time_ctrl, ui, time_commands);
-            self.current_time_ui(store_ctx.app_options, time_ctrl, ui, time_commands);
+            self.current_time_ui(store_ctx, ui, time_commands);
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 help_button(ui);
@@ -1589,16 +1589,45 @@ impl TimePanel {
             }
         }
 
-        self.current_time_ui(store_ctx.app_options, time_ctrl, ui, time_commands);
+        self.current_time_ui(store_ctx, ui, time_commands);
+    }
+
+    fn current_time_id(store_id: &StoreId, timeline: &TimelineName) -> egui::Id {
+        egui::Id::unique(("current_time_edit", store_id, timeline))
+    }
+
+    /// Focus the recording's timestamp field and select its contents for replacement.
+    pub fn focus_current_time(
+        &mut self,
+        ctx: &egui::Context,
+        store: &ActiveStoreContext<'_>,
+        timestamp_format: TimestampFormat,
+    ) -> bool {
+        let time_ctrl = store.time_ctrl;
+        let (Some(time), Some(time_type)) = (time_ctrl.time_int(), time_ctrl.time_type()) else {
+            return false;
+        };
+        let id = Self::current_time_id(store.recording_store_id(), time_ctrl.timeline_name());
+        let text = time_type.format_opt(time, timestamp_format, 0..=9);
+        let mut state = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
+        state
+            .cursor
+            .set_char_range(Some(egui::text::CCursorRange::select_all_str(&text)));
+        state.store(ctx, id);
+        self.time_edit_string = Some(text);
+        ctx.memory_mut(|mem| mem.request_focus(id));
+        ctx.request_repaint();
+        true
     }
 
     fn current_time_ui(
         &mut self,
-        app_options: &AppOptions,
-        time_ctrl: &TimeControl,
+        store_ctx: &StoreViewContext<'_>,
         ui: &mut egui::Ui,
         time_commands: &mut Vec<TimeControlCommand>,
     ) {
+        let time_ctrl = store_ctx.time_ctrl;
+        let timestamp_format = store_ctx.app_options.timestamp_format;
         if let Some(time_int) = time_ctrl.time_int()
             && let Some(time) = time_ctrl.time()
             && let Some(time_type) = time_ctrl.time_type()
@@ -1625,8 +1654,12 @@ impl TimePanel {
             let subsecond_decimals =
                 num_subsecond_decimals(1.0 / self.time_ranges_ui.points_per_time);
 
+            let id = Self::current_time_id(store_ctx.db.store_id(), time_ctrl.timeline_name());
+            if !ui.memory(|mem| mem.has_focus(id) || mem.had_focus_last_frame(id)) {
+                self.time_edit_string = None;
+            }
             let mut time_str = self.time_edit_string.clone().unwrap_or_else(|| {
-                time_type.format_opt(time_int, app_options.timestamp_format, subsecond_decimals)
+                time_type.format_opt(time_int, timestamp_format, subsecond_decimals)
             });
 
             let text_edit_width = 200.0.at_most(ui.available_width());
@@ -1634,6 +1667,7 @@ impl TimePanel {
             let response = ui
                 .add(
                     ReTextEdit::singleline(&mut time_str)
+                        .id(id)
                         .size(TIME_CONTROL_ROW_SIZE)
                         .desired_width(text_edit_width),
                 )
@@ -1642,19 +1676,24 @@ impl TimePanel {
                 self.time_edit_string = Some(time_str.clone());
             }
             if response.lost_focus() {
-                if let Some(time_int) =
-                    time_type.parse_time(&time_str, app_options.timestamp_format)
-                {
-                    time_commands.push(TimeControlCommand::SetTimeClamped(time_int.into()));
-                } else {
-                    re_log::warn!("Failed to parse {time_str:?}");
+                if !ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    if let Some(time_int) = time_type.parse_time(&time_str, timestamp_format) {
+                        time_commands.push(TimeControlCommand::SetTimeClamped(time_int.into()));
+                    } else {
+                        re_log::warn!("Failed to parse {time_str:?}");
+                    }
                 }
                 self.time_edit_string = None;
             }
-            let response = response.on_hover_text(format!(
-                "Timestamp: {}",
-                re_format::format_int(time_int.as_i64())
-            ));
+            let response = response.on_hover_ui(|ui| {
+                ui.label(format!(
+                    "Timestamp: {}",
+                    re_format::format_int(time_int.as_i64())
+                ));
+                if self.source == TimePanelSource::Recording {
+                    RecordingCommandKind::JumpToTime.tooltip_ui(ui);
+                }
+            });
 
             response.context_menu(|ui| {
                 copy_time_properties_context_menu(ui, time);

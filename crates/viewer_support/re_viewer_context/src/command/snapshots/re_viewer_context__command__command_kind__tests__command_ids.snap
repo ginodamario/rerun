@@ -3,6 +3,7 @@ source: crates/viewer_support/re_viewer_context/src/command/command_kind.rs
 expression: listing
 ---
 recording.close: Close the current recording (unsaved data will be lost)
+recording.jump_to_time: Select the current time and enter a timestamp to jump to
 recording.open_add_view_or_container_dialog: Add a new view or container to the viewport
 recording.print_blueprint_store: Prints the entire blueprint store to the console and clipboard. WARNING: this may be A LOT of text.
 recording.print_chunk_store: Prints the entire chunk store to the console and clipboard. WARNING: this may be A LOT of text.
