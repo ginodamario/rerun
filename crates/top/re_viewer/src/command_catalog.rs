@@ -115,6 +115,7 @@ impl MenuGroup {
             ],
             Self::Playback => &[
                 Command(Recording(RecordingCommand::TogglePlayPause)),
+                Command(Recording(RecordingCommand::JumpToTime)),
                 Command(Recording(RecordingCommand::ToggleReferenceCursor)),
                 Separator,
                 Command(Recording(RecordingCommand::SeekToPreviousEvent)),

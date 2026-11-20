@@ -94,7 +94,7 @@ pub struct AppState {
     pub selection_histories: HashMap<StoreId, re_selection_panel::SelectionHistory>,
 
     selection_panel: re_selection_panel::SelectionPanel,
-    time_panel: re_time_panel::TimePanel,
+    pub(crate) time_panel: re_time_panel::TimePanel,
     blueprint_time_panel: re_time_panel::TimePanel,
     #[serde(skip)]
     blueprint_tree: re_blueprint_tree::BlueprintTree,

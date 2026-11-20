@@ -22,6 +22,10 @@ These controls let you stop play/pause/step/loop time just like a video player.
 When looping you can choose to loop through the whole recording, or just a sub-section of timeline that you select.
 The rate of playback can also be sped up or slowed down by adjusting the rate multiplier.
 
+Press `T` to select the **Current time** field, type a timestamp, and press `Enter` to jump there.
+Use a tick number on a sequence timeline or a duration such as `12.5s` on a duration timeline.
+Press `Esc` to cancel the edit.
+
 Streams
 -------
 

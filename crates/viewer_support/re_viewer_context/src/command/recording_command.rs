@@ -74,6 +74,7 @@ pub enum RecordingCommandKind {
 
     // Playback:
     TogglePlayPause,
+    JumpToTime,
     ToggleReferenceCursor,
     SeekToPreviousEvent,
     SeekToNextEvent,
@@ -218,6 +219,10 @@ impl RecordingCommandKind {
             ),
 
             Self::TogglePlayPause => ("Toggle play/pause", "Either play or pause the time"),
+            Self::JumpToTime => (
+                "Jump to time…",
+                "Select the current time and enter a timestamp to jump to",
+            ),
             Self::ToggleReferenceCursor => (
                 "Toggle reference cursor",
                 "Pin the reference cursor at the playback time or clear it. Drag its diamond in any time series plot to move it.",
@@ -330,6 +335,7 @@ impl RecordingCommandKind {
             Self::ToggleBlueprintInspectionPanel => smallvec![ctrl_shift(Key::I)],
 
             Self::TogglePlayPause => smallvec![key(Key::Space)],
+            Self::JumpToTime => smallvec![key(Key::T)],
             Self::ToggleReferenceCursor => smallvec![key(Key::C)],
             Self::SeekToPreviousEvent => smallvec![cmd(Key::ArrowLeft)],
             Self::SeekToNextEvent => smallvec![cmd(Key::ArrowRight)],

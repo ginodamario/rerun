@@ -1433,6 +1433,24 @@ impl AppCore {
                 app_blueprint.toggle_time_panel(&self.command_sender);
             }
 
+            RecordingCommandKind::JumpToTime => {
+                if let Some(store) = store_context
+                    && store.recording_store_id() == &recording_id
+                    && !(app_blueprint.time_panel_state().is_hidden()
+                        && app_blueprint.time_panel_overridden())
+                {
+                    let timestamp_format = self.app_options().timestamp_format;
+                    if self
+                        .state
+                        .time_panel
+                        .focus_current_time(egui_ctx, store, timestamp_format)
+                        && app_blueprint.time_panel_state().is_hidden()
+                    {
+                        app_blueprint.toggle_time_panel(&self.command_sender);
+                    }
+                }
+            }
+
             #[cfg(debug_assertions)]
             RecordingCommandKind::ToggleBlueprintInspectionPanel => {
                 self.app_options_mut().inspect_blueprint_timeline ^= true;
@@ -2074,4 +2092,80 @@ async fn reference_cursor_shortcut() {
     harness.key_press(Key::C);
     harness.run_steps(3);
     assert_eq!(reference(&harness), None);
+}
+
+#[cfg(all(test, feature = "testing"))]
+#[tokio::test]
+async fn jump_to_time_shortcut() {
+    use egui::{Event, Key, Modifiers};
+    use egui_kittest::kittest::Queryable as _;
+    use re_log_types::Timeline;
+    use re_sdk_types::archetypes::Scalars;
+
+    let mut harness = crate::viewer_test_utils::viewer_harness(&Default::default());
+    let recording_id = StoreId::random(StoreKind::Recording, "jump_to_time");
+    let timeline = Timeline::new_duration("elapsed");
+    let chunk = re_chunk::Chunk::builder("signal")
+        .with_archetype_auto_row([(timeline, 0)], &Scalars::single(0.0))
+        .with_archetype_auto_row([(timeline, 20_000_000_000_i64)], &Scalars::single(1.0))
+        .build()
+        .expect("valid scalar data");
+    let app = harness.state_mut();
+    app.store_hub_mut()
+        .entity_db_entry(&recording_id)
+        .add_chunk(&Arc::new(chunk))
+        .unwrap();
+    app.command_sender
+        .send_system(SystemCommand::SetRoute(Route::LocalRecording {
+            recording_id: recording_id.clone(),
+        }));
+    harness.run_steps(3);
+    harness
+        .state()
+        .command_sender
+        .send_system(SystemCommand::TimeControlCommands {
+            store_id: recording_id.clone(),
+            time_commands: vec![
+                TimeControlCommand::SetActiveTimeline(*timeline.name()),
+                TimeControlCommand::Pause,
+                TimeControlCommand::SetTime(2_000_000_000_i64.into()),
+            ],
+        });
+    harness.run_steps(3);
+
+    let ctrl_shift = Modifiers::CTRL | Modifiers::SHIFT;
+    harness.key_press_modifiers(ctrl_shift, Key::C);
+    harness.run_steps(3);
+    assert!(harness.query_by_label("Current time").is_none());
+    harness.key_press(Key::T);
+    harness.run_steps(3);
+    assert!(harness.get_by_label("Current time").is_focused());
+    harness.event(Event::Text("12.5s".to_owned()));
+    harness.run_steps(1);
+    assert_eq!(
+        harness.get_by_label("Current time").value().as_deref(),
+        Some("12.5s")
+    );
+    harness.key_press(Key::Enter);
+    harness.run_steps(3);
+    let time = |harness: &egui_kittest::Harness<'_, crate::App>| {
+        harness
+            .state()
+            .state
+            .time_control(&recording_id)
+            .unwrap()
+            .time_i64()
+    };
+    assert_eq!(time(&harness), Some(12_500_000_000));
+
+    harness.key_press_modifiers(ctrl_shift, Key::T);
+    harness.run_steps(3);
+    harness.key_press(Key::T);
+    harness.run_steps(3);
+    assert!(harness.get_by_label("Current time").is_focused());
+    harness.event(Event::Text("4s".to_owned()));
+    harness.run_steps(1);
+    harness.key_press(Key::Escape);
+    harness.run_steps(3);
+    assert_eq!(time(&harness), Some(12_500_000_000));
 }
