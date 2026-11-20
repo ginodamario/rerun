@@ -46,6 +46,21 @@ See [missing features](../../development/roadmap.md#missing-features).
 To set the X (time) axis window, see [Scrolling plots and the time axis](#query-range-and-axis-window).
 To pan and zoom several plots together, see [Link the time axis of several plots](../view-concepts/visible-time-ranges.md#link-the-time-axis-of-several-plots).
 
+#### Compare two times
+
+Move the playback cursor to the time you want to measure from, then press `C` or click the **Pin reference** flag next to the playback controls in the time panel.
+Each time series plot on that recording and timeline shows a dashed reference line.
+Drag the diamond at the top of any plot to move the shared reference.
+You can move the playback cursor or play through the recording while the reference stays fixed.
+
+The readout shows the elapsed time (Δt) and the change in each visible signal (Δ), both calculated as playback minus reference.
+The **Time series tooltip decimal places** setting applies to both signal values and elapsed time.
+With **Automatic**, elapsed time shows three decimal places in the displayed time unit.
+Sequence timelines show the difference in ticks.
+A dash means a value is unavailable at one of the cursors.
+The comparison still works when the reference is outside the visible plot window.
+Press `C` again or click **Clear reference** in the time panel to return to the usual tooltip.
+
 #### Error bands and uncertainty
 
 [`Measurements`](../../reference/types/archetypes/measurements.md) logs values together with their variances.
