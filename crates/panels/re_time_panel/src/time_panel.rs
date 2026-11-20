@@ -424,8 +424,12 @@ impl TimePanel {
             ui.vertical(|ui| {
                 if has_more_than_one_time_point {
                     ui.horizontal(|ui| {
-                        self.time_control_ui
-                            .play_pause_ui(time_ctrl, ui, time_commands);
+                        self.time_control_ui.play_pause_ui(
+                            time_ctrl,
+                            self.source,
+                            ui,
+                            time_commands,
+                        );
 
                         self.time_control_ui
                             .playback_speed_ui(time_ctrl, ui, time_commands);
@@ -446,7 +450,7 @@ impl TimePanel {
             // One row:
             if has_more_than_one_time_point {
                 self.time_control_ui
-                    .play_pause_ui(time_ctrl, ui, time_commands);
+                    .play_pause_ui(time_ctrl, self.source, ui, time_commands);
             }
 
             self.time_control_ui
@@ -1411,7 +1415,7 @@ impl TimePanel {
             ui.vertical(|ui| {
                 ui.horizontal(|ui| {
                     self.time_control_ui
-                        .play_pause_ui(time_ctrl, ui, time_commands);
+                        .play_pause_ui(time_ctrl, self.source, ui, time_commands);
                     self.time_control_ui
                         .playback_speed_ui(time_ctrl, ui, time_commands);
                     self.time_control_ui.fps_ui(time_ctrl, ui, time_commands);
@@ -1430,7 +1434,7 @@ impl TimePanel {
         } else {
             // One row:
             self.time_control_ui
-                .play_pause_ui(time_ctrl, ui, time_commands);
+                .play_pause_ui(time_ctrl, self.source, ui, time_commands);
             self.time_control_ui
                 .timeline_selector_ui(time_ctrl, db, ui, time_commands);
             self.time_control_ui

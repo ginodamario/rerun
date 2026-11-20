@@ -103,7 +103,7 @@ impl LineSeriesStyling {
 pub(crate) fn load_line_series_with_styling(
     ctx: &ViewContext<'_>,
     view_query: &ViewQuery<'_>,
-    time_per_pixel: f64,
+    window: crate::plot_query::PlotWindow,
     data_result: &re_viewer_context::DataResult,
     instruction: &re_viewer_context::VisualizerInstruction,
     output: &re_viewer_context::VisualizerExecutionOutput,
@@ -114,20 +114,7 @@ pub(crate) fn load_line_series_with_styling(
     let current_query = ctx.current_query();
     let query_ctx = ctx.query_context(data_result, current_query.clone(), instruction.id);
 
-    let data_time_range =
-        util::data_result_time_range(ctx.viewer_ctx, data_result, view_query.timeline);
-    let query_range = match util::determine_query_range(ctx, data_time_range) {
-        Ok(range) => range,
-        Err(err) => {
-            output.report_unspecified_source(
-                instruction.id,
-                ViewerReportSeverity::Error,
-                format!("Failed to determine query range: {err}"),
-            );
-            return Vec::new();
-        }
-    };
-    let query = re_chunk_store::RangeQuery::new(view_query.timeline, query_range)
+    let query = re_chunk_store::RangeQuery::new(view_query.timeline, window.range)
         // We must fetch data with extended bounds, otherwise the query clamping would
         // cut-off the data early at the edge of the view.
         .include_extended_bounds(true);
@@ -367,7 +354,7 @@ pub(crate) fn load_line_series_with_styling(
                 has_variances,
                 visualizer_instruction_id: instruction.id,
             },
-            time_per_pixel,
+            window.time_per_pixel,
             points,
             ctx.recording_engine().store(),
             view_query,

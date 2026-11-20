@@ -500,3 +500,52 @@ fn run_time_panel_and_save_snapshot(
 
     snapshot_results.extend_harness(&mut harness);
 }
+
+#[test]
+fn pin_and_clear_reference_per_timeline() {
+    use re_test_context::external::egui_kittest::kittest::Queryable as _;
+
+    let mut ctx = TestContext::default();
+    log_data(&mut ctx, "a", "frame_a", 0);
+    log_data(&mut ctx, "a", "frame_a", 5);
+    log_data(&mut ctx, "b", "frame_b", 0);
+    log_data(&mut ctx, "b", "frame_b", 7);
+    ctx.set_active_timeline("frame_a");
+    ctx.set_time(5_i64);
+    let mut panel = TimePanel::default();
+    let mut harness = ctx
+        .setup_kittest_for_rendering_ui([700.0, 300.0])
+        .build_ui(|ui| {
+            ctx.run_ui(ui, |viewer, ui| {
+                let blueprint =
+                    ViewportBlueprint::from_db(viewer.blueprint_db(), viewer.blueprint_query);
+                let mut commands = Vec::new();
+                panel.show_expanded_with_header(
+                    viewer,
+                    &viewer.active_recording_store_view_context(),
+                    &blueprint,
+                    ui,
+                    &mut commands,
+                );
+                ctx.send_time_commands(viewer.store_id().clone(), commands);
+            });
+            ctx.handle_system_commands(ui.ctx());
+        });
+    harness.get_by_label("Pin reference").click();
+    harness.run();
+    let reference = || {
+        ctx.run_once_in_egui_central_panel(|viewer, _| {
+            viewer.time_ctrl.reference_time().map(|t| t.as_i64())
+        })
+    };
+    assert_eq!(reference(), Some(5));
+    ctx.set_active_timeline("frame_b");
+    harness.run();
+    assert_eq!(reference(), None);
+    ctx.set_active_timeline("frame_a");
+    harness.run();
+    assert_eq!(reference(), Some(5));
+    harness.get_by_label("Clear reference").click();
+    harness.run();
+    assert_eq!(reference(), None);
+}

@@ -22,6 +22,7 @@ recording.seek_to_next_event: Move the time marker forward to the next point in 
 recording.seek_to_previous_event: Move the time marker back to the previous point in time that has any logged data
 recording.seek_to_start: Go to the beginning of the timeline
 recording.toggle_play_pause: Either play or pause the time
+recording.toggle_reference_cursor: Pin the reference cursor at the playback time or clear it. Drag its diamond in any time series plot to move it.
 recording.toggle_time_panel: Toggle the bottom panel
 recording.undo_blueprint_edit: Undo the last blueprint edit for the open recording
 server.copy_url_to_clipboard: Copy the URL of the server
@@ -35,6 +36,7 @@ table.undo_blueprint_edit: Undo the last blueprint edit for the current table
 ui.about: Show version, build, platform, and rendering information
 ui.capture_profile_trace: Capture profiling data and save them as a .puffin file
 ui.close_all_recordings: Close all open current recording (unsaved data will be lost)
+ui.close_side_panels: Hide the Blueprint, Selection, and Time panels
 ui.copy_direct_link_to_clipboard: Try to copy a shareable link to the current screen. This is not supported for all data sources & viewer states.
 ui.copy_entity_hierarchy_to_clipboard: Copy the complete entity hierarchy tree of the currently active recording to the clipboard.
 ui.copy_screenshot_to_clipboard: Copy screenshot of the whole app to clipboard

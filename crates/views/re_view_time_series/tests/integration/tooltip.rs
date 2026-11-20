@@ -190,3 +190,117 @@ fn test_time_cursor_values_follow_timeline() {
     harness.get_by_label("#4");
     harness.get_by_label("Speed 4");
 }
+
+#[test]
+fn shared_reference_survives_drag_and_offscreen_comparison() {
+    use re_sdk_types::blueprint::archetypes::TimeAxis;
+    use re_sdk_types::blueprint::components::LinkAxis;
+    use re_sdk_types::encodings::{TimeRange, TimeRangeBoundary};
+    use re_viewer_context::TimeControlCommand;
+
+    let mut ctx = TestContext::new_with_view_class::<TimeSeriesView>();
+    ctx.app_options.time_series_tooltip_decimals = Some(0);
+    let timeline = Timeline::log_tick();
+    for time in (0..=100_i64).step_by(10) {
+        ctx.log_entity("speed", |b| {
+            b.with_archetype_auto_row([(timeline, time)], &Scalars::single(time as f64))
+        });
+        if time >= 60 {
+            ctx.log_entity("pressure", |b| {
+                b.with_archetype_auto_row(
+                    [(timeline, time)],
+                    &Measurements::new([5.0]).with_units(["Pa"]),
+                )
+            });
+        }
+    }
+    ctx.log_entity("speed", |b| {
+        b.with_archetype_auto_row(TimePoint::STATIC, &SeriesLines::new().with_names(["Speed"]))
+    });
+    ctx.log_entity("pressure", |b| {
+        b.with_archetype_auto_row(
+            TimePoint::STATIC,
+            &Measurements::update_fields().with_names(["Pressure"]),
+        )
+    });
+    ctx.set_active_timeline(*timeline.name());
+    ctx.set_time(80_i64);
+    let [overview, zoomed, aggregated] = ctx.setup_viewport_blueprint(|viewer, blueprint| {
+        [(0, 100), (70, 90), (0, 1_000_000)].map(|(start, end)| {
+            let view = ViewBlueprint::new_with_root_wildcard(TimeSeriesView::identifier());
+            let axis = ViewProperty::from_archetype_for_view::<TimeAxis>(viewer, view.id);
+            viewer.save_blueprint_archetype(
+                axis.blueprint_store_path,
+                &TimeAxis::new()
+                    .with_link(LinkAxis::Independent)
+                    .with_view_range(TimeRange {
+                        start: TimeRangeBoundary::Absolute(start.into()),
+                        end: TimeRangeBoundary::Absolute(end.into()),
+                    }),
+            );
+            blueprint.add_view_at_root(view)
+        })
+    });
+    ctx.send_time_commands(
+        ctx.active_store_id(),
+        [TimeControlCommand::SetReferenceTime {
+            timeline: *timeline.name(),
+            time: Some(re_log_types::TimeInt::new_temporal(80)),
+        }],
+    );
+    ctx.handle_system_commands(&egui::Context::default());
+
+    let view = std::cell::Cell::new(overview);
+    let mut harness = ctx
+        .setup_kittest_for_rendering_ui([600.0, 300.0])
+        .with_max_steps(10) // Switching zoom levels recomputes aggregation and axis bounds.
+        .build_ui(|ui| ctx.run_with_single_view(ui, view.get()));
+    harness.run();
+    harness.get_by_label("Speed 80  (Δ 0)");
+    let handle = harness.get_by_label("Reference cursor").rect().center();
+    let destination = egui::pos2(145.0, handle.y);
+    harness.hover_at(handle);
+    harness.drag_at(handle);
+    harness.run();
+    harness.hover_at(destination);
+    harness.run();
+    harness.drop_at(destination);
+    harness.run();
+    let reference = ctx.run_once_in_egui_central_panel(|viewer, _ui| {
+        assert_eq!(
+            viewer.time_ctrl.time_i64(),
+            Some(80),
+            "dragging the diamond must leave the playback cursor fixed"
+        );
+        viewer
+            .time_ctrl
+            .reference_time()
+            .expect("reference still pinned")
+            .as_i64()
+    });
+    assert!(
+        (5..30).contains(&reference),
+        "dragged reference at {reference}"
+    );
+
+    harness.remove_cursor();
+    harness.run();
+    harness.snapshot("shared_reference_cursor");
+
+    view.set(zoomed);
+    harness.run();
+    assert!(harness.query_by_label("Reference cursor").is_none());
+    harness.get_by_label(&format!("#80  (Δt +{} ticks)", 80 - reference));
+    harness.get_by_label(&format!("Speed 80  (Δ +{})", 80 - reference));
+    harness.get_by_label("Pressure 5 Pa  (Δ —)");
+
+    ctx.set_time(2_i64);
+    harness.run();
+    harness.get_by_label(&format!("#2  (Δt {} ticks)", 2 - reference));
+    harness.get_by_label(&format!("Speed 2  (Δ {})", 2 - reference));
+
+    // All samples fit within one pixel here. Measurements still use the original values.
+    view.set(aggregated);
+    harness.run();
+    harness.get_by_label(&format!("Speed 2  (Δ {})", 2 - reference));
+}

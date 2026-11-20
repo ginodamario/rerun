@@ -1,5 +1,4 @@
 use itertools::Itertools as _;
-use rayon::prelude::*;
 use re_sdk_types::archetypes::SeriesPoints;
 use re_sdk_types::components::{self, MarkerShape, MarkerSize};
 use re_sdk_types::{Archetype as _, FromArrow as _, archetypes};
@@ -9,8 +8,8 @@ use re_view::{
 use re_viewer_context::external::re_entity_db::InstancePath;
 use re_viewer_context::{
     IdentifiedViewSystem, SingleRequiredComponentConstraint, ViewContext, ViewQuery,
-    ViewStateExt as _, ViewSystemExecutionError, ViewerReportSeverity, VisualizerExecutionOutput,
-    VisualizerQueryInfo, VisualizerSystem, typed_fallback_for,
+    ViewSystemExecutionError, ViewerReportSeverity, VisualizerExecutionOutput, VisualizerQueryInfo,
+    VisualizerSystem, typed_fallback_for,
 };
 
 use crate::series_query::{
@@ -18,12 +17,6 @@ use crate::series_query::{
     collect_series_name, collect_series_visibility, determine_num_series,
 };
 use crate::{PlotPoint, PlotPointAttrs, PlotSeries, PlotSeriesKind, ScatterAttrs, util};
-
-/// Output data from [`SeriesPointsSystem`].
-#[derive(Default, Clone)]
-pub struct SeriesPointsOutput {
-    pub all_series: Vec<PlotSeries>,
-}
 
 /// The system for rendering [`archetypes::SeriesPoints`] archetypes.
 #[derive(Default, Debug)]
@@ -71,40 +64,20 @@ impl VisualizerSystem for SeriesPointsSystem {
 
         let output = VisualizerExecutionOutput::default();
 
-        let time_per_pixel = ctx
-            .view_state
-            .downcast_ref::<crate::view_class::TimeSeriesViewState>()
-            .map_or(1.0, |state| state.time_per_pixel);
-
-        let data_results: Vec<_> = query
-            .iter_visualizer_instruction_for(Self::identifier())
-            .collect();
-
-        let all_series: Vec<_> = data_results
-            .par_iter()
-            .map(|(data_result, instruction)| {
-                Self::load_series(
-                    ctx,
-                    query,
-                    time_per_pixel,
-                    data_result,
-                    instruction,
-                    &output,
-                )
-            })
-            .collect();
-
-        let mut all_series_flat = Vec::new();
-        all_series_flat.extend(all_series.into_iter().flatten());
-
-        // Build instanced-mesh draw data for the scatter markers (one mesh per `MarkerShape`).
-        let draw_data = Self::build_draw_data(ctx, query, &all_series_flat);
+        let series = crate::plot_query::load_plot_series(
+            ctx,
+            query,
+            Self::identifier(),
+            &output,
+            |data, instruction, window| {
+                Self::load_series(ctx, query, window, data, instruction, &output)
+            },
+        );
+        let draw_data = Self::build_draw_data(ctx, query, &series.all_series);
 
         Ok(output
             .with_draw_data(draw_data)
-            .with_visualizer_data(SeriesPointsOutput {
-                all_series: all_series_flat,
-            }))
+            .with_visualizer_data(series))
     }
 }
 
@@ -189,7 +162,7 @@ impl SeriesPointsSystem {
     fn load_series(
         ctx: &ViewContext<'_>,
         view_query: &ViewQuery<'_>,
-        time_per_pixel: f64,
+        window: crate::plot_query::PlotWindow,
         data_result: &re_viewer_context::DataResult,
         instruction: &re_viewer_context::VisualizerInstruction,
         output: &VisualizerExecutionOutput,
@@ -199,20 +172,7 @@ impl SeriesPointsSystem {
         let current_query = ctx.current_query();
         let query_ctx = ctx.query_context(data_result, current_query.clone(), instruction.id);
 
-        let data_time_range =
-            util::data_result_time_range(ctx.viewer_ctx, data_result, view_query.timeline);
-        let query_range = match util::determine_query_range(ctx, data_time_range) {
-            Ok(range) => range,
-            Err(err) => {
-                output.report_unspecified_source(
-                    instruction.id,
-                    ViewerReportSeverity::Error,
-                    format!("Failed to determine query range: {err}"),
-                );
-                return Vec::new();
-            }
-        };
-        let query = re_chunk_store::RangeQuery::new(view_query.timeline, query_range);
+        let query = re_chunk_store::RangeQuery::new(view_query.timeline, window.range);
 
         let cast_rules =
             util::float64_cast_rules([archetypes::Scalars::descriptor_scalars().component]);
@@ -459,7 +419,7 @@ impl SeriesPointsSystem {
                     has_variances: false,
                     visualizer_instruction_id: instruction.id,
                 },
-                time_per_pixel,
+                window.time_per_pixel,
                 points,
                 ctx.recording_engine().store(),
                 view_query,

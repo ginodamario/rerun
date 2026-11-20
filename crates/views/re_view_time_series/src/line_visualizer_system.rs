@@ -1,4 +1,3 @@
-use rayon::prelude::*;
 use re_sdk_types::components;
 use re_sdk_types::{Archetype as _, archetypes};
 use re_viewer_context::{
@@ -21,12 +20,6 @@ use crate::{PlotSeries, PlotSeriesKind, util};
 /// it deposits correct. `epaint` fades thin strokes the same way and at the same cutoff, so
 /// plot lines match egui's own: the default 0.75 point stroke lands at 75% opacity at 1x.
 const FADE_CUTOFF_WIDTH_PX: f32 = 1.0;
-
-/// Output data from [`SeriesLinesSystem`].
-#[derive(Default, Clone)]
-pub struct SeriesLinesOutput {
-    pub all_series: Vec<PlotSeries>,
-}
 
 /// The system for rendering [`archetypes::SeriesLines`] archetypes.
 #[derive(Default, Debug)]
@@ -75,40 +68,20 @@ impl VisualizerSystem for SeriesLinesSystem {
 
         let output = VisualizerExecutionOutput::default();
 
-        let time_per_pixel = ctx
-            .view_state
-            .downcast_ref::<crate::view_class::TimeSeriesViewState>()
-            .map_or(1.0, |state| state.time_per_pixel);
-
-        let data_results: Vec<_> = query
-            .iter_visualizer_instruction_for(Self::identifier())
-            .collect();
-
-        let all_series: Vec<_> = data_results
-            .par_iter()
-            .map(|(data_result, instruction)| {
-                Self::load_series(
-                    ctx,
-                    query,
-                    time_per_pixel,
-                    data_result,
-                    instruction,
-                    &output,
-                )
-            })
-            .collect();
-
-        let mut all_series_flat = Vec::new();
-        all_series_flat.extend(all_series.into_iter().flatten());
-
-        // Build re_renderer line draw data from the collected series.
-        let draw_data = build_line_draw_data(ctx, query, &all_series_flat)?;
+        let series = crate::plot_query::load_plot_series(
+            ctx,
+            query,
+            Self::identifier(),
+            &output,
+            |data, instruction, window| {
+                Self::load_series(ctx, query, window, data, instruction, &output)
+            },
+        );
+        let draw_data = build_line_draw_data(ctx, query, &series.all_series)?;
 
         Ok(output
             .with_draw_data(draw_data)
-            .with_visualizer_data(SeriesLinesOutput {
-                all_series: all_series_flat,
-            }))
+            .with_visualizer_data(series))
     }
 }
 
@@ -415,7 +388,7 @@ impl SeriesLinesSystem {
     fn load_series(
         ctx: &ViewContext<'_>,
         view_query: &ViewQuery<'_>,
-        time_per_pixel: f64,
+        window: crate::plot_query::PlotWindow,
         data_result: &re_viewer_context::DataResult,
         instruction: &re_viewer_context::VisualizerInstruction,
         output: &re_viewer_context::VisualizerExecutionOutput,
@@ -423,7 +396,7 @@ impl SeriesLinesSystem {
         load_line_series_with_styling(
             ctx,
             view_query,
-            time_per_pixel,
+            window,
             data_result,
             instruction,
             output,

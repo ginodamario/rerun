@@ -9,6 +9,8 @@ use re_ui::{
 use re_viewer_context::RecordingCommandKind;
 use re_viewer_context::{TimeControl, TimeControlCommand};
 
+use crate::time_panel::TimePanelSource;
+
 #[derive(serde::Deserialize, serde::Serialize, Default)]
 pub struct TimeControlUi;
 
@@ -131,6 +133,7 @@ You can also define your own timelines, e.g. for sensor time or camera frame num
     pub fn play_pause_ui(
         &self,
         time_ctrl: &TimeControl,
+        source: TimePanelSource,
         ui: &mut egui::Ui,
         time_commands: &mut Vec<TimeControlCommand>,
     ) {
@@ -140,7 +143,35 @@ You can also define your own timelines, e.g. for sensor time or camera frame num
             self.skip_to_end_button_ui(ui, time_commands);
             self.playhead_nav_ui(ui, time_commands);
             self.loop_button_ui(time_ctrl, ui, time_commands);
+
+            if source == TimePanelSource::Recording {
+                Self::reference_button_ui(ui, time_ctrl, time_commands);
+            }
         });
+    }
+
+    fn reference_button_ui(
+        ui: &mut egui::Ui,
+        time_ctrl: &TimeControl,
+        time_commands: &mut Vec<TimeControlCommand>,
+    ) {
+        let pinned = time_ctrl.reference_time().is_some();
+        let label = if pinned {
+            "Clear reference"
+        } else {
+            "Pin reference"
+        };
+        let button = egui::Button::icon(icons::FLAG_UNTOGGLED, label)
+            .size(TIME_CONTROL_ROW_SIZE)
+            .secondary()
+            .selected(pinned);
+        if ui
+            .add_enabled(pinned || time_ctrl.time_int().is_some(), button)
+            .on_hover_ui(|ui| RecordingCommandKind::ToggleReferenceCursor.tooltip_ui(ui))
+            .clicked()
+        {
+            time_commands.push(TimeControlCommand::ToggleReferenceCursor);
+        }
     }
 
     #[expect(clippy::unused_self)]

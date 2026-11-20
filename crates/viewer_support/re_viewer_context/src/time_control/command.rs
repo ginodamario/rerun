@@ -29,6 +29,15 @@ pub enum MoveSpeed {
 /// Can be sent using [`crate::SystemCommand::TimeControlCommands`].
 #[derive(Debug)]
 pub enum TimeControlCommand {
+    /// Pin the current playback time or clear the active timeline's existing reference.
+    ToggleReferenceCursor,
+
+    /// Pin, move, or clear the reference cursor on a recording timeline.
+    SetReferenceTime {
+        timeline: TimelineName,
+        time: Option<re_log_types::TimeInt>,
+    },
+
     /// Highlight a time range for this frame.
     ///
     /// Stored in `TimeControl::highlighted_range_next_frame` by the command
@@ -146,6 +155,7 @@ impl TimeControlCommand {
     pub fn from_recording_command(command: RecordingCommandKind) -> Option<Self> {
         Some(match command {
             RecordingCommandKind::TogglePlayPause => Self::TogglePlayPause,
+            RecordingCommandKind::ToggleReferenceCursor => Self::ToggleReferenceCursor,
             RecordingCommandKind::SeekToEndAndFollow => Self::MoveEndAndFollow,
             RecordingCommandKind::SeekToPreviousEvent => Self::StepTimeBack,
             RecordingCommandKind::SeekToNextEvent => Self::StepTimeForward,
@@ -218,6 +228,23 @@ impl TimeControl {
         command: &TimeControlCommand,
     ) -> NeedsRepaint {
         match command {
+            TimeControlCommand::ToggleReferenceCursor => {
+                let Some(state) = self.states.get_mut(self.timeline.name()) else {
+                    return NeedsRepaint::No;
+                };
+                state.reference_time = state.reference_time.is_none().then(|| state.time.floor());
+                NeedsRepaint::Yes
+            }
+            TimeControlCommand::SetReferenceTime { timeline, time } => {
+                if let Some(state) = self.states.get_mut(timeline)
+                    && state.reference_time != *time
+                {
+                    state.reference_time = *time;
+                    NeedsRepaint::Yes
+                } else {
+                    NeedsRepaint::No
+                }
+            }
             TimeControlCommand::ExtendTimeRange { timeline, range } => {
                 self.time_extents_next_frame
                     .entry(*timeline)

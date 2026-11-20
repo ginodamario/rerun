@@ -10,6 +10,7 @@ mod line_visualizer_system;
 mod markers;
 mod measurements_visualizer_system;
 mod naming;
+mod plot_query;
 mod point_visualizer_system;
 mod series_query;
 mod util;

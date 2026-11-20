@@ -1439,6 +1439,7 @@ impl AppCore {
             }
 
             RecordingCommandKind::TogglePlayPause
+            | RecordingCommandKind::ToggleReferenceCursor
             | RecordingCommandKind::SeekToPreviousEvent
             | RecordingCommandKind::SeekToNextEvent
             | RecordingCommandKind::SeekBackwardShort
@@ -2014,4 +2015,63 @@ async fn async_save_dialog(
     let mut bytes = Vec::new();
     re_log_encoding::Encoder::encode_into(rrd_version, options, messages, &mut bytes)?;
     file_handle.write(&bytes).await.context("Failed to save")
+}
+
+#[cfg(all(test, feature = "testing"))]
+#[tokio::test]
+async fn reference_cursor_shortcut() {
+    use egui::Key;
+    use egui_kittest::kittest::Queryable as _;
+    use re_log_types::{StoreId, StoreKind};
+    use re_viewer_context::{Route, SystemCommandSender as _};
+
+    let mut harness = crate::viewer_test_utils::viewer_harness(&Default::default());
+    let recording_id = StoreId::random(StoreKind::Recording, "reference_shortcut");
+    let app = harness.state_mut();
+    app.store_hub_mut().entity_db_entry(&recording_id);
+    app.command_sender
+        .send_system(SystemCommand::SetRoute(Route::LocalRecording {
+            recording_id: recording_id.clone(),
+        }));
+    harness.run_steps(3);
+    harness
+        .state()
+        .command_sender
+        .send_system(SystemCommand::TimeControlCommands {
+            store_id: recording_id.clone(),
+            time_commands: vec![
+                TimeControlCommand::Pause,
+                TimeControlCommand::SetTime(42_i64.into()),
+            ],
+        });
+    harness.run_steps(3);
+
+    let reference = |harness: &egui_kittest::Harness<'_, crate::App>| {
+        harness
+            .state()
+            .state
+            .time_control(&recording_id)
+            .expect("the active recording has a time control")
+            .reference_time()
+            .map(|t| t.as_i64())
+    };
+    harness.key_press(Key::C);
+    harness.run_steps(3);
+    assert_eq!(reference(&harness), Some(42));
+
+    harness.get_by_label_contains("Search commands…").click();
+    harness.run_steps(3);
+    harness.key_press(Key::C);
+    harness.run_steps(3);
+    assert_eq!(
+        reference(&harness),
+        Some(42),
+        "typing in search keeps the reference pinned"
+    );
+    harness.key_press(Key::Escape);
+    harness.run_steps(3);
+
+    harness.key_press(Key::C);
+    harness.run_steps(3);
+    assert_eq!(reference(&harness), None);
 }

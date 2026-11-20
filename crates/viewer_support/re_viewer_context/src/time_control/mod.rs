@@ -90,6 +90,10 @@ struct TimeState {
     /// The current time (play marker).
     time: TimeReal,
 
+    /// Reference used to compare signal values in time series plots.
+    #[serde(default)]
+    reference_time: Option<TimeInt>,
+
     /// The last time this timeline was paused at.
     ///
     /// Used for the web url.
@@ -116,6 +120,7 @@ impl TimeState {
     fn new(time: impl Into<TimeReal>) -> Self {
         Self {
             time: time.into(),
+            reference_time: None,
             last_paused_time: None,
             fps: 30.0, // TODO(emilk): estimate based on data
             time_selection: Default::default(),
@@ -868,6 +873,11 @@ impl TimeControl {
     /// The current time.
     pub fn time_int(&self) -> Option<TimeInt> {
         self.time().map(|t| t.floor())
+    }
+
+    /// The pinned reference on the active recording timeline.
+    pub fn reference_time(&self) -> Option<TimeInt> {
+        self.states.get(self.timeline_name())?.reference_time
     }
 
     /// The current time.

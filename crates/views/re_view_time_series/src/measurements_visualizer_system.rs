@@ -1,24 +1,15 @@
-use rayon::prelude::*;
 use re_sdk_types::components;
 use re_sdk_types::{Archetype as _, archetypes};
 use re_viewer_context::{
     IdentifiedViewSystem, SingleRequiredComponentConstraint, ViewContext, ViewQuery,
-    ViewStateExt as _, ViewSystemExecutionError, VisualizerExecutionOutput, VisualizerQueryInfo,
-    VisualizerSystem,
+    ViewSystemExecutionError, VisualizerExecutionOutput, VisualizerQueryInfo, VisualizerSystem,
 };
 
-use crate::PlotSeries;
 use crate::line_series_loader::{
     LineSeriesSource, LineSeriesStyling, load_line_series_with_styling,
 };
 use crate::line_visualizer_system::build_line_draw_data;
 use crate::util;
-
-/// Output data from [`MeasurementsSeriesSystem`].
-#[derive(Default, Clone)]
-pub struct MeasurementsSeriesOutput {
-    pub all_series: Vec<PlotSeries>,
-}
 
 /// The system for rendering [`archetypes::Measurements`] archetypes.
 ///
@@ -67,15 +58,6 @@ impl VisualizerSystem for MeasurementsSeriesSystem {
 
         let output = VisualizerExecutionOutput::default();
 
-        let time_per_pixel = ctx
-            .view_state
-            .downcast_ref::<crate::view_class::TimeSeriesViewState>()
-            .map_or(1.0, |state| state.time_per_pixel);
-
-        let data_results: Vec<_> = query
-            .iter_visualizer_instruction_for(Self::identifier())
-            .collect();
-
         let source = LineSeriesSource {
             value_descriptor: archetypes::Measurements::descriptor_values(),
             queried_components: archetypes::Measurements::all_component_identifiers().collect(),
@@ -84,30 +66,27 @@ impl VisualizerSystem for MeasurementsSeriesSystem {
             unit_descriptor: Some(archetypes::Measurements::descriptor_units()),
         };
 
-        let all_series: Vec<_> = data_results
-            .par_iter()
-            .map(|(data_result, instruction)| {
+        let series = crate::plot_query::load_plot_series(
+            ctx,
+            query,
+            Self::identifier(),
+            &output,
+            |data, instruction, window| {
                 load_line_series_with_styling(
                     ctx,
                     query,
-                    time_per_pixel,
-                    data_result,
+                    window,
+                    data,
                     instruction,
                     &output,
                     &source,
                 )
-            })
-            .collect();
-
-        let mut all_series_flat = Vec::new();
-        all_series_flat.extend(all_series.into_iter().flatten());
-
-        let draw_data = build_line_draw_data(ctx, query, &all_series_flat)?;
+            },
+        );
+        let draw_data = build_line_draw_data(ctx, query, &series.all_series)?;
 
         Ok(output
             .with_draw_data(draw_data)
-            .with_visualizer_data(MeasurementsSeriesOutput {
-                all_series: all_series_flat,
-            }))
+            .with_visualizer_data(series))
     }
 }
