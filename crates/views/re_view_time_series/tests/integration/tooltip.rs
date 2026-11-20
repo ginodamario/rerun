@@ -88,8 +88,9 @@ fn test_tooltip_mode(tooltip_mode: TooltipMode, snapshot_results: &mut SnapshotR
         TooltipMode::TimeCursor => unreachable!("this fixture tests mouse hover"),
     };
     let size = egui::vec2(500.0, 300.0);
-    for decimals in [None, Some(2)] {
+    for (decimals, show_tooltips) in [(None, true), (Some(2), true), (Some(2), false)] {
         test_context.app_options.time_series_tooltip_decimals = decimals;
+        test_context.app_options.show_time_series_tooltips = show_tooltips;
         let mut harness = test_context
             .setup_kittest_for_rendering_ui(size)
             .build_ui(|ui| test_context.run_with_single_view(ui, view_id));
@@ -97,6 +98,11 @@ fn test_tooltip_mode(tooltip_mode: TooltipMode, snapshot_results: &mut SnapshotR
         harness.hover_at(egui::pos2(size.x * 0.43, size.y * 0.51));
         harness.run();
 
+        if !show_tooltips {
+            assert!(harness.query_by_label(fixed_precision_label).is_none());
+            harness.key_down(egui::Key::X);
+            harness.run();
+        }
         if decimals.is_some() {
             harness.get_by_label(fixed_precision_label);
         } else {
@@ -117,7 +123,81 @@ fn test_tooltip_mode(tooltip_mode: TooltipMode, snapshot_results: &mut SnapshotR
             ),
             TooltipMode::TimeCursor => unreachable!("this fixture tests mouse hover"),
         }
+        if !show_tooltips {
+            harness.key_up(egui::Key::X);
+            harness.run();
+            assert!(harness.query_by_label(fixed_precision_label).is_none());
+        }
     }
+}
+
+#[test]
+fn reveal_cursor_values_while_holding_x_over_plot() {
+    use re_viewer_context::TimeControlCommand;
+
+    let mut ctx = TestContext::new_with_view_class::<TimeSeriesView>();
+    ctx.app_options.show_time_series_tooltips = false;
+    let timeline = Timeline::log_tick();
+    for time in [0_i64, 10] {
+        ctx.log_entity("Speed", |b| {
+            b.with_archetype_auto_row([(timeline, time)], &Scalars::single(time as f64))
+        });
+    }
+    ctx.set_active_timeline(*timeline.name());
+    ctx.set_time(5_i64);
+    let view = ctx.setup_viewport_blueprint(|_, blueprint| {
+        blueprint.add_view_at_root(ViewBlueprint::new_with_root_wildcard(
+            TimeSeriesView::identifier(),
+        ))
+    });
+    let mut text = String::new();
+    let mut harness = ctx
+        .setup_kittest_for_rendering_ui([500.0, 300.0])
+        .build_ui(|ui| {
+            ui.text_edit_singleline(&mut text)
+                .accessible_name("Test input");
+            ctx.run_with_single_view(ui, view);
+        });
+    let plot_pos = egui::pos2(200.0, 100.0);
+    for pinned in [false, true] {
+        if pinned {
+            ctx.send_time_commands(
+                ctx.active_store_id(),
+                [TimeControlCommand::ToggleReferenceCursor],
+            );
+            ctx.handle_system_commands(&harness.ctx);
+        }
+        let header = if pinned { "#5  (Δt +0 ticks)" } else { "#5" };
+        harness.hover_at(plot_pos);
+        harness.run();
+        assert!(harness.query_by_label(header).is_none());
+        if pinned {
+            harness.get_by_label("Reference cursor");
+        }
+        harness.key_down(egui::Key::X);
+        harness.run();
+        harness.get_by_label(header);
+        if pinned {
+            harness.get_by_label("Speed 5  (Δ 0)");
+        }
+        harness.remove_cursor();
+        harness.run();
+        assert!(harness.query_by_label(header).is_none());
+        harness.hover_at(plot_pos);
+        harness.key_up(egui::Key::X);
+        harness.run();
+        assert!(harness.query_by_label(header).is_none());
+    }
+    harness.get_by_label("Test input").click();
+    harness.hover_at(plot_pos);
+    harness.key_down(egui::Key::X);
+    harness.event(egui::Event::Text("x".to_owned()));
+    harness.run();
+    assert_eq!(
+        harness.get_by_label("Test input").value().as_deref(),
+        Some("x")
+    );
+    assert!(harness.query_by_label("#5  (Δt +0 ticks)").is_none());
 }
 
 #[test]

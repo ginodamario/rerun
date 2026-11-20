@@ -97,6 +97,11 @@ async fn settings_screen() {
         snapshot_results
             .add(harness.try_snapshot(format!("settings_screen_{}", os_snapshot_suffix(os))));
 
+        assert!(harness.state().app_options().show_time_series_tooltips);
+        harness.get_by_label("Show time series tooltips").click();
+        harness.run_ok();
+        assert!(!harness.state().app_options().show_time_series_tooltips);
+
         for (choice, expected) in [("2", Some(2)), ("Automatic", None)] {
             harness
                 .get_by_role_and_label(Role::ComboBox, "Time series tooltip decimal places")

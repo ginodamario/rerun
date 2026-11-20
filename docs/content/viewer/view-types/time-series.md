@@ -46,6 +46,12 @@ See [missing features](../../development/roadmap.md#missing-features).
 To set the X (time) axis window, see [Scrolling plots and the time axis](#query-range-and-axis-window).
 To pan and zoom several plots together, see [Link the time axis of several plots](../view-concepts/visible-time-ranges.md#link-the-time-axis-of-several-plots).
 
+#### Show signal values on demand
+
+In Viewer **Settings → General**, turn off **Show time series tooltips**.
+Hold `X` over a plot to see its usual signal values, including deltas if a reference cursor is pinned.
+Release `X` to hide the values again.
+
 #### Compare two times
 
 Move the playback cursor to the time you want to measure from, then press `C` or click the **Pin reference** flag next to the playback controls in the time panel.
