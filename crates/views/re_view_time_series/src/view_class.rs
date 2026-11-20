@@ -196,6 +196,7 @@ impl ViewClass for TimeSeriesView {
                 ),
             )
             .control("Move time cursor", MouseButtonText(MOVE_TIME_CURSOR_BUTTON))
+            .control("Show hidden signal tooltips", "hold X")
             .control(
                 "Fit timeline and follow cursor",
                 ("double", icons::LEFT_MOUSE_CLICK, "X-axis"),
@@ -882,7 +883,10 @@ impl ViewClass for TimeSeriesView {
                 re_renderer_draw_data,
             )?;
 
-            // Hover still targets plot items when the readout follows the time cursor.
+            let show_tooltips = ctx.app_options().show_time_series_tooltips
+                || (ui.rect_contains_pointer(response.rect)
+                    && crate::util::tooltip_key_held(ui.ctx()));
+            // Hover still targets plot items when their values are hidden or follow the time cursor.
             let hovered_data_result = (!legend_hovered)
                 .then(|| {
                     hover_time_series(
@@ -899,6 +903,7 @@ impl ViewClass for TimeSeriesView {
                         } else {
                             tooltip_mode
                         },
+                        show_tooltips,
                     )
                 })
                 .flatten();
@@ -1082,6 +1087,9 @@ impl ViewClass for TimeSeriesView {
                 );
             }
 
+            if !show_tooltips {
+                return Ok(());
+            }
             if let (Some(reference), Some(time)) = (reference_time, current_time) {
                 let readings = chain!(
                     &line_series.readings,
@@ -1406,6 +1414,7 @@ fn hover_time_series(
     app_options: &AppOptions,
     plot_item_id_to_data_result_address: &ahash::HashMap<ItemId, DataResultInteractionAddress>,
     tooltip_mode: TooltipMode,
+    show_tooltip: bool,
 ) -> Option<re_viewer_context::Item> {
     match tooltip_mode {
         TooltipMode::Nearest | TooltipMode::TimeCursor => nearest_data_point_on_hover(
@@ -1417,7 +1426,7 @@ fn hover_time_series(
             time_type,
             app_options,
             plot_item_id_to_data_result_address,
-            tooltip_mode == TooltipMode::Nearest,
+            show_tooltip && tooltip_mode == TooltipMode::Nearest,
         ),
         TooltipMode::All => all_series_tooltip(
             ui,
@@ -1428,6 +1437,7 @@ fn hover_time_series(
             time_type,
             app_options,
             plot_item_id_to_data_result_address,
+            show_tooltip,
         ),
     }
 }
@@ -1715,6 +1725,7 @@ fn all_series_tooltip(
     time_type: TimeType,
     app_options: &AppOptions,
     plot_item_id_to_data_result_address: &ahash::HashMap<ItemId, DataResultInteractionAddress>,
+    show_tooltip: bool,
 ) -> Option<re_viewer_context::Item> {
     re_tracing::profile_function!();
 
@@ -1727,7 +1738,6 @@ fn all_series_tooltip(
     const MAX_TOOLTIP_ROWS: usize = 10;
 
     let mut rows = Vec::new();
-    let mut num_displayed_series = 0_usize;
     let mut closest_series = None;
     let mut displayed_series = ahash::HashSet::default();
     for (series_idx, series) in all_plot_series.iter().enumerate() {
@@ -1750,14 +1760,15 @@ fn all_series_tooltip(
             continue;
         }
 
-        ui.painter()
-            .circle_filled(sample.marker_point, 3.0, series.color);
-
         if closest_series.is_none_or(|(closest, _)| sample.distance_sq < closest) {
             closest_series = Some((sample.distance_sq, series_idx));
         }
 
-        num_displayed_series += 1;
+        if !show_tooltip {
+            continue;
+        }
+        ui.painter()
+            .circle_filled(sample.marker_point, 3.0, series.color);
         if rows.len() < MAX_TOOLTIP_ROWS {
             rows.push((
                 tooltip_series_label(series),
@@ -1771,21 +1782,19 @@ fn all_series_tooltip(
         }
     }
 
-    if rows.is_empty() {
-        return None;
+    if !rows.is_empty() {
+        let time_label =
+            format_time_for_tooltip(hover_time, time_type, app_options.timestamp_format);
+        PlotTooltipStyle::Compact.show_at_pointer(
+            ui,
+            response,
+            response.id.with("all_series"),
+            &time_label,
+            rows.iter()
+                .map(|(label, value, color)| (label.as_str(), value.as_str(), *color)),
+            displayed_series.len() - rows.len(),
+        );
     }
-
-    let time_label = format_time_for_tooltip(hover_time, time_type, app_options.timestamp_format);
-    let num_omitted_rows = num_displayed_series.saturating_sub(rows.len());
-    PlotTooltipStyle::Compact.show_at_pointer(
-        ui,
-        response,
-        response.id.with("all_series"),
-        &time_label,
-        rows.iter()
-            .map(|(label, value, color)| (label.as_str(), value.as_str(), *color)),
-        num_omitted_rows,
-    );
 
     const LINE_PROXIMITY_RADIUS_SQ: f32 = 48.0 * 48.0;
     let (_, series_idx) =

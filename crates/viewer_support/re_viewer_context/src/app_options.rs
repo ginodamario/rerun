@@ -65,6 +65,9 @@ pub struct AppOptions {
     #[serde(rename = "timestamp_format")]
     pub timestamp_format: TimestampFormat,
 
+    /// Show time series signal tooltips without holding X.
+    pub show_time_series_tooltips: bool,
+
     /// Fixed decimal places for time series tooltip values, or automatic precision when unset.
     pub time_series_tooltip_decimals: Option<u8>,
 
@@ -138,6 +141,7 @@ impl AppOptions {
 
             timestamp_format: TimestampFormat::default(),
 
+            show_time_series_tooltips: true,
             time_series_tooltip_decimals: None,
 
             video: Default::default(),
