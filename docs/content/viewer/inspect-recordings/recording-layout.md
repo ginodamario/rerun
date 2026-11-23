@@ -58,6 +58,8 @@ To control automatic views from code, see [Keep or stop automatic views](configu
 
 Choose **Save blueprint…** in the File menu to save the current recording blueprint.
 Open an `.rbl` with **Open file…** or drag it into the Viewer.
+The desktop Viewer remembers the folder where you last opened or saved a blueprint.
+Both **Open file…** and **Save blueprint…** start in that folder the next time you use them, even after restarting the Viewer.
 Recording blueprint files can be shared and version controlled.
 For loading from code, including C++, see [Loading blueprints from any language](configure-from-code.md#loading-blueprints-from-any-language).
 
