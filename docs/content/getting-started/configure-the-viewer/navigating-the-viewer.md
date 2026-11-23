@@ -189,6 +189,8 @@ Blueprint files are small, portable, and can be version-controlled alongside you
 ### Loading a blueprint
 
 Load a blueprint file using "Open…" from the file menu, or simply drag and drop the `.rbl` file into the Viewer.
+The desktop Viewer remembers the folder where you last opened or saved a blueprint.
+Both **Open…** and **Save blueprint…** start in that folder the next time you use them, even after restarting the Viewer.
 
 > [!IMPORTANT]
 > The blueprint's Application ID must match the Application ID of your recording. Blueprints are bound to specific Application IDs to ensure they work with compatible data structures. See [Application IDs](../../concepts/visualization/blueprints.md#application-ids-binding-blueprints-to-data) for more details.

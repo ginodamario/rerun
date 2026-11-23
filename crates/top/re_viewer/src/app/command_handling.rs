@@ -917,7 +917,9 @@ impl AppCore {
             UICommand::OpenFile => {
                 use re_data_source::LogDataSource;
                 use re_log_msg::FileSource;
-                for file_path in open_file_dialog_native(self.startup.main_thread_token) {
+                for file_path in
+                    open_file_dialog_native(self.startup.main_thread_token, &self.state)
+                {
                     self.command_sender
                         .send_system(SystemCommand::LoadDataSource(LogDataSource::File {
                             file_source: FileSource::FileDialog {
@@ -950,7 +952,9 @@ impl AppCore {
             UICommand::ImportFileIntoCurrentRecording => {
                 use re_data_source::LogDataSource;
                 use re_log_msg::FileSource;
-                for file_path in open_file_dialog_native(self.startup.main_thread_token) {
+                for file_path in
+                    open_file_dialog_native(self.startup.main_thread_token, &self.state)
+                {
                     self.command_sender
                         .send_system(SystemCommand::LoadDataSource(LogDataSource::File {
                             file_source: FileSource::FileDialog {
@@ -1870,9 +1874,22 @@ pub(super) fn handle_time_ctrl_event(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+fn blueprint_file_dialog(state: &crate::AppState) -> rfd::FileDialog {
+    let dialog = rfd::FileDialog::new();
+    if let Some(dir) = state.blueprint_directory() {
+        dialog.set_directory(dir)
+    } else {
+        dialog
+    }
+}
+
 /// [This may only be called on the main thread](https://docs.rs/rfd/latest/rfd/#macos-non-windowed-applications-async-and-threading).
 #[cfg(not(target_arch = "wasm32"))]
-fn open_file_dialog_native(_: crate::MainThreadToken) -> Vec<std::path::PathBuf> {
+fn open_file_dialog_native(
+    _: crate::MainThreadToken,
+    state: &crate::AppState,
+) -> Vec<std::path::PathBuf> {
     re_tracing::profile_function!();
 
     let supported: Vec<_> = if re_importer::iter_external_importers().len() == 0 {
@@ -1881,7 +1898,7 @@ fn open_file_dialog_native(_: crate::MainThreadToken) -> Vec<std::path::PathBuf>
         vec![]
     };
 
-    let mut dialog = rfd::FileDialog::new();
+    let mut dialog = blueprint_file_dialog(state);
 
     // If there's at least one external loader registered, then literally anything goes!
     if !supported.is_empty() {
@@ -1937,6 +1954,7 @@ fn save_recording(
     };
     save_entity_db(
         app,
+        StoreKind::Recording,
         RrdSnapshot::recording(entity_db, loop_selection),
         file_name,
         title.to_owned(),
@@ -1962,7 +1980,13 @@ fn save_blueprint(
         crate::saving::sanitize_app_id(store_context.application_id())
     );
 
-    save_entity_db(app, snapshot, file_name, "Save blueprint".to_owned())
+    save_entity_db(
+        app,
+        StoreKind::Blueprint,
+        snapshot,
+        file_name,
+        "Save blueprint".to_owned(),
+    )
 }
 
 // TODO(emilk): unify this with `ViewerContext::save_file_dialog`
@@ -1970,6 +1994,7 @@ fn save_blueprint(
 #[allow(clippy::unnecessary_wraps)] // cannot return error on web
 fn save_entity_db(
     #[allow(clippy::allow_attributes, unused_variables)] app: &mut AppCore, // only used on native
+    #[allow(clippy::allow_attributes, unused_variables)] store_kind: StoreKind, // only used on native
     snapshot: crate::saving::RrdSnapshot,
     file_name: String,
     title: String,
@@ -1993,12 +2018,18 @@ fn save_entity_db(
             // Native
             let path = {
                 re_tracing::profile_scope!("file_dialog");
-                rfd::FileDialog::new()
-                    .set_file_name(file_name)
+                let dialog = match store_kind {
+                    StoreKind::Blueprint => blueprint_file_dialog(&app.state),
+                    StoreKind::Recording => rfd::FileDialog::new(),
+                };
+                dialog.set_file_name(file_name)
                     .set_title(title)
                     .save_file()
             };
             if let Some(path) = path {
+                if store_kind == StoreKind::Blueprint {
+                    app.state.remember_blueprint_file(&path);
+                }
                 app.background_tasks.spawn_file_saver(move || {
                     crate::saving::encode_to_file(version, &path, messages.into_iter())?;
                     Ok(path)

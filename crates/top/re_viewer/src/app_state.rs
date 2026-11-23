@@ -48,6 +48,11 @@ pub struct AppState {
     /// Global options for the whole viewer.
     pub(crate) app_options: AppOptions,
 
+    /// Last directory chosen for a blueprint in the native Viewer.
+    /// Serde can round-trip non-UTF-8 directories as an `OsString`.
+    #[cfg(not(target_arch = "wasm32"))]
+    last_blueprint_directory: Option<std::ffi::OsString>,
+
     /// The viewer's audio output. The device opens on first use.
     #[serde(skip)]
     pub(crate) audio_output: crate::audio_output::AudioOutput,
@@ -175,6 +180,8 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             app_options: Default::default(),
+            #[cfg(not(target_arch = "wasm32"))]
+            last_blueprint_directory: None,
             audio_output: Default::default(),
             agent_settings: Default::default(),
             agent_panel_open: false,
@@ -232,6 +239,23 @@ fn resolve_entry_kind(
 }
 
 impl AppState {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn blueprint_directory(&self) -> Option<&std::path::Path> {
+        self.last_blueprint_directory
+            .as_deref()
+            .map(std::path::Path::new)
+            .filter(|dir| dir.is_dir())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn remember_blueprint_file(&mut self, path: &std::path::Path) {
+        if let Ok(path) = std::path::absolute(path)
+            && let Some(dir) = path.parent()
+        {
+            self.last_blueprint_directory = Some(dir.as_os_str().to_owned());
+        }
+    }
+
     /// Returns the latest terminal loading error for `source`.
     pub fn last_loading_error_for(&self, source: &LogSource) -> Option<&str> {
         self.last_loading_error
@@ -1341,6 +1365,23 @@ mod tests {
     use re_log_types::EntryId;
 
     use super::*;
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn blueprint_directory_survives_restart() {
+        let dir = tempfile::tempdir().expect("create a blueprint directory");
+        let mut state: AppState =
+            ron::from_str("()").expect("load state without a saved directory");
+        assert_eq!(state.blueprint_directory(), None);
+
+        state.remember_blueprint_file(&dir.path().join("layout.rbl"));
+        let saved = ron::to_string(&state).expect("save application state");
+        let restored: AppState = ron::from_str(&saved).expect("restore application state");
+        assert_eq!(restored.blueprint_directory(), Some(dir.path()));
+
+        dir.close().expect("remove the blueprint directory");
+        assert_eq!(restored.blueprint_directory(), None);
+    }
 
     #[test]
     fn loading_error_lookup_ignores_redap_open_behavior() {

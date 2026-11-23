@@ -114,11 +114,25 @@ impl AppCore {
             LogDataSource::File {
                 path,
                 #[cfg(not(target_arch = "wasm32"))]
+                file_source,
+                #[cfg(not(target_arch = "wasm32"))]
                 assets,
                 #[cfg(target_arch = "wasm32")]
                 file,
                 ..
             } => {
+                #[cfg(not(target_arch = "wasm32"))]
+                if matches!(
+                    file_source,
+                    re_log_msg::FileSource::FileDialog { .. }
+                        | re_log_msg::FileSource::DragAndDrop { .. }
+                ) && path
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("rbl"))
+                {
+                    self.state.remember_blueprint_file(path);
+                }
+
                 if self.should_register_via_internal_catalog(path) {
                     self.register_via_internal_catalog(
                         path,
