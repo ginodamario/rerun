@@ -401,6 +401,25 @@ pub fn instance_hover_card_ui(
     instance_path.data_ui(ctx, ui, UiLayout::Tooltip);
 }
 
+/// Show details for a data row in Streams or Blueprint, immediately when requested with X.
+pub fn panel_data_hover_ui(
+    options: &re_viewer_context::AppOptions,
+    response: &egui::Response,
+    contents: impl FnOnce(&mut egui::Ui),
+) {
+    let tooltip = if options.show_panel_data_tooltips {
+        egui::Tooltip::for_enabled(response)
+    } else if response.hovered()
+        && response.enabled()
+        && options.panel_data_tooltips_enabled(&response.ctx)
+    {
+        egui::Tooltip::for_widget(response)
+    } else {
+        return;
+    };
+    tooltip.show(contents);
+}
+
 /// Displays the "hover card" (i.e. big tooltip) for an entity.
 ///
 /// If `include_subtree=true`, stats for the entire entity subtree will be shown.

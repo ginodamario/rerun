@@ -15,11 +15,6 @@ use re_viewport_blueprint::{ViewProperty, ViewPropertyQueryError};
 use crate::aggregation::{AverageAggregator, MinMaxAggregator};
 use crate::{PlotPoint, PlotPointAttrs, PlotSeries, PlotSeriesKind};
 
-pub(crate) fn tooltip_key_held(ctx: &egui::Context) -> bool {
-    ctx.input(|i| i.focused && i.modifiers.is_none() && i.key_down(egui::Key::X))
-        && !ctx.text_edit_focused()
-}
-
 pub fn series_supported_encodings() -> impl IntoIterator<Item = arrow::datatypes::DataType> {
     [
         arrow::datatypes::DataType::Float32,

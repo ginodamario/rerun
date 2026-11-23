@@ -76,6 +76,10 @@ The tree on the left shows you all entities that were logged for this timeline.
 When you expand an entity you will see both the components that are associated with it, as well as any child entities.
 Selecting entities or events in the streams panel shows additional information in the selection panel about them respectively.
 
+To hide data tooltips, turn off **Settings → General → Show data tooltips in Streams and Blueprint**.
+Hold `X` over an entity, component, or event in Streams, or an entity in the Blueprint tree, to see its details.
+Release `X` to hide the tooltip.
+
 ### Discontinuity skipping
 Rerun automatically detects discontinuities in the selected timeline and will skip over them while playing.
 This is particularly useful whenever you have large gaps in the timestamps of your data recordings.
@@ -95,6 +99,9 @@ You can grab the title of any view to dock it to different parts of the viewport
 The blueprint panel shows the recording layout as a tree of containers, views, and the entities in each view.
 Use the eye icon to show or hide an item, or the remove button to remove it from the layout.
 Select an entity in a view to change its visualizers and other per-view settings in the selection panel.
+
+Hover over an entity to see its path and data summary.
+If you turn off **Show data tooltips in Streams and Blueprint** in Viewer **Settings → General**, hold `X` over the entity to show that summary.
 
 See [Customize your visualization](../view-concepts/customize-views.md) for visualizers and overrides, and [Recording layout and blueprints](recording-layout.md) for saving and resetting layouts.
 

@@ -134,7 +134,7 @@ fn settings_screen_ui_impl(
         blueprint_gc: _,               // not yet exposed
         visualizer_limits_enabled,
         timestamp_format,
-        show_time_series_tooltips,
+        show_panel_data_tooltips,
         time_series_tooltip_decimals,
         video,
         mapbox_access_token,
@@ -201,8 +201,11 @@ fn settings_screen_ui_impl(
         time_format_section_ui(ui, timestamp_format);
     });
 
-    ui.checkbox(show_time_series_tooltips, "Show time series tooltips")
-        .on_hover_text("When off, hold X over a time series plot to see its signal values.");
+    ui.checkbox(
+        show_panel_data_tooltips,
+        "Show data tooltips in Streams and Blueprint",
+    )
+    .on_hover_text("When off, hold X over a data item in either panel to see its details.");
     ui.horizontal(|ui| {
         let label = ui.label("Time series tooltip decimal places");
         egui::ComboBox::from_id_salt("time_series_tooltip_decimals")
