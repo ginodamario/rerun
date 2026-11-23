@@ -6,6 +6,7 @@ use egui::{
 };
 use re_context_menu::{SelectionUpdateBehavior, context_menu_ui_for_item_with_context};
 use re_data_ui::DataUi as _;
+use re_data_ui::item_ui::panel_data_hover_ui;
 use re_entity_db::InstancePath;
 use re_entity_db::entity_db::RedapConnectionState;
 use re_log_types::{
@@ -896,7 +897,7 @@ impl TimePanel {
                 },
             );
 
-        let response = response.on_hover_ui(|ui| {
+        panel_data_hover_ui(store_ctx.app_options(), &response, |ui| {
             let include_subtree = true;
             re_data_ui::item_ui::entity_hover_card_ui(ui, store_ctx, entity_path, include_subtree);
         });
@@ -1058,7 +1059,7 @@ impl TimePanel {
 
                 let response_rect = response.rect;
 
-                response.on_hover_ui(|ui| {
+                panel_data_hover_ui(store_ctx.app_options(), &response, |ui| {
                     let num_static_messages =
                         store.num_physical_static_events_for_component(entity_path, component);
                     let num_temporal_messages = store
@@ -1236,7 +1237,8 @@ impl TimePanel {
                 ctx.selection_state().set_hovered(item.to_item());
             }
 
-            if ui.dragged_id().is_none() {
+            if ui.dragged_id().is_none() && ctx.app_options().panel_data_tooltips_enabled(ui.ctx())
+            {
                 // TODO(jprochazk): check chunk.num_rows() and chunk.timeline.is_sorted()
                 //                  if too many rows and unsorted, show some generic error tooltip (=too much data)
                 egui::Tooltip::always_open(

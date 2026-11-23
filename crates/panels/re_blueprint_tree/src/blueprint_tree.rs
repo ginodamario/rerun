@@ -678,7 +678,7 @@ impl BlueprintTree {
             list_item.show_hierarchical(ui, item_content)
         };
 
-        let response = response.on_hover_ui(|ui| {
+        re_data_ui::item_ui::panel_data_hover_ui(ctx.app_options(), &response, |ui| {
             let include_subtree = false;
             re_data_ui::item_ui::entity_hover_card_ui(
                 ui,

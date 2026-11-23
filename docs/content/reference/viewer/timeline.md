@@ -49,6 +49,10 @@ The tree on the left shows you all entities that were logged for this timeline.
 When you expand an entity you will see both the components that are associated with it, as well as any child entities.
 Selecting entities or events in the streams view shows additional information in the selection panel about them respectively.
 
+To hide data tooltips, turn off **Settings → General → Show data tooltips in Streams and Blueprint**.
+Hold `X` over an entity, component, or event in Streams, or an entity in the Blueprint tree, to see its details.
+Release `X` to hide the tooltip.
+
 ### Discontinuity skipping
 Rerun automatically detects discontinuities in the selected timeline and will skip over them while playing.
 This is particularly useful whenever you have large gaps in the timestamps of your data recordings.

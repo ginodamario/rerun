@@ -95,10 +95,12 @@ async fn settings_screen() {
         snapshot_results
             .add(harness.try_snapshot(format!("settings_screen_{}", os_snapshot_suffix(os))));
 
-        assert!(harness.state().app_options().show_time_series_tooltips);
-        harness.get_by_label("Show time series tooltips").click();
+        assert!(harness.state().app_options().show_panel_data_tooltips);
+        harness
+            .get_by_label("Show data tooltips in Streams and Blueprint")
+            .click();
         harness.run_ok();
-        assert!(!harness.state().app_options().show_time_series_tooltips);
+        assert!(!harness.state().app_options().show_panel_data_tooltips);
 
         for (choice, expected) in [("2", Some(2)), ("Automatic", None)] {
             harness
@@ -112,6 +114,68 @@ async fn settings_screen() {
                 expected
             );
         }
+    }
+}
+
+#[test]
+fn hold_x_to_inspect_data_in_streams_and_blueprint() {
+    use re_sdk_types::archetypes::Scalars;
+    use re_test_viewport::TestContextExt as _;
+    use re_view_time_series::TimeSeriesView;
+    use re_viewer_context::{CollapseScope, ViewClass as _};
+    use re_viewport_blueprint::{ViewBlueprint, ViewportBlueprint};
+
+    re_time_panel::TimePanel::ensure_registered_subscribers();
+    let mut ctx = TestContext::new_with_view_class::<TimeSeriesView>();
+    ctx.app_options.show_panel_data_tooltips = false;
+    ctx.log_entity("speed", |builder| {
+        builder.with_archetype_auto_row([re_log_types::build_frame_nr(1)], &Scalars::single(12.0))
+    });
+    ctx.set_active_timeline("frame_nr");
+    let view = ctx.setup_viewport_blueprint(|_, blueprint| {
+        blueprint.add_view_at_root(ViewBlueprint::new_with_root_wildcard(
+            TimeSeriesView::identifier(),
+        ))
+    });
+
+    for show_streams in [true, false] {
+        let mut streams = re_time_panel::TimePanel::default();
+        let mut tree = re_blueprint_tree::BlueprintTree::default();
+        let mut harness = ctx
+            .setup_kittest_for_rendering_ui([700.0, 300.0])
+            .build_ui(|ui| {
+                ctx.run_ui(ui, |viewer, ui| {
+                    let blueprint =
+                        ViewportBlueprint::from_db(viewer.blueprint_db(), viewer.blueprint_query);
+                    if show_streams {
+                        streams.show_expanded_with_header(
+                            viewer,
+                            &viewer.active_recording_store_view_context(),
+                            &blueprint,
+                            ui,
+                            &mut Vec::new(),
+                        );
+                    } else {
+                        CollapseScope::BlueprintTree
+                            .view(view)
+                            .set_open(ui.ctx(), true);
+                        CollapseScope::BlueprintTree
+                            .data_result(view, re_log_types::EntityPath::root())
+                            .set_open(ui.ctx(), true);
+                        tree.show(viewer, &blueprint, ui, &ctx.view_states.lock());
+                    }
+                });
+            });
+        harness.run();
+        harness.get_by_label("speed").hover();
+        harness.run();
+        assert!(harness.query_by_label("Entity").is_none());
+        harness.key_down(egui::Key::X);
+        harness.run();
+        harness.get_by_label("Entity");
+        harness.key_up(egui::Key::X);
+        harness.run();
+        assert!(harness.query_by_label("Entity").is_none());
     }
 }
 

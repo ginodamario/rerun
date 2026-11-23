@@ -65,8 +65,9 @@ pub struct AppOptions {
     #[serde(rename = "timestamp_format")]
     pub timestamp_format: TimestampFormat,
 
-    /// Show time series signal tooltips without holding X.
-    pub show_time_series_tooltips: bool,
+    /// Show data tooltips in the Streams and Blueprint panels without holding X.
+    #[serde(alias = "show_time_series_tooltips")]
+    pub show_panel_data_tooltips: bool,
 
     /// Fixed decimal places for time series tooltip values, or automatic precision when unset.
     pub time_series_tooltip_decimals: Option<u8>,
@@ -141,7 +142,7 @@ impl AppOptions {
 
             timestamp_format: TimestampFormat::default(),
 
-            show_time_series_tooltips: true,
+            show_panel_data_tooltips: true,
             time_series_tooltip_decimals: None,
 
             video: Default::default(),
@@ -179,6 +180,13 @@ impl AppOptions {
             // Ensure to not probe the Wayland compositor, because tests run without one.
             ..Self::default_with_custom_window_decorations(false)
         }
+    }
+
+    /// Whether a Streams or Blueprint data tooltip can be displayed this frame.
+    pub fn panel_data_tooltips_enabled(&self, ctx: &egui::Context) -> bool {
+        self.show_panel_data_tooltips
+            || (ctx.input(|i| i.focused && i.modifiers.is_none() && i.key_down(egui::Key::X))
+                && !ctx.text_edit_focused())
     }
 
     pub fn mapbox_access_token(&self) -> Option<String> {

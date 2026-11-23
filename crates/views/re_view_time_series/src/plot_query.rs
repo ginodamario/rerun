@@ -44,10 +44,7 @@ pub(crate) fn load_plot_series(
         .view_state
         .downcast_ref::<TimeSeriesViewState>()
         .map_or(1.0, |state| state.time_per_pixel);
-    let reference = ctx.viewer_ctx.time_ctrl.reference_time().filter(|_| {
-        ctx.viewer_ctx.app_options().show_time_series_tooltips
-            || util::tooltip_key_held(ctx.egui_ctx())
-    });
+    let reference = ctx.viewer_ctx.time_ctrl.reference_time();
 
     let instructions: Vec<_> = query.iter_visualizer_instruction_for(visualizer).collect();
     let results: Vec<_> = instructions

@@ -36,6 +36,9 @@ The blueprint panel displays a tree view showing:
 
 ### Interaction
 
+Hover over an entity to see its path and data summary.
+If you turn off **Show data tooltips in Streams and Blueprint** in Viewer **Settings → General**, hold `X` over the entity to show that summary.
+
 Hovering over any item reveals controls for:
 - **Eye icon**: Show or hide the item
 - **"-" button**: Remove the item from the blueprint
