@@ -85,6 +85,108 @@ fn double_clicking_time_axis_fits_timeline_and_follows_cursor() {
 }
 
 #[test]
+fn zooming_axes_during_playback() {
+    use blueprint::components::PlayState;
+    use encodings::TimeRangeBoundary::CursorRelative;
+    use re_viewer_context::TimeControlCommand;
+
+    let mut test_context = TestContext::new_with_view_class::<TimeSeriesView>();
+    let timeline = Timeline::log_tick();
+    for tick in [0, 10_000] {
+        test_context.log_entity("plot", |builder| {
+            builder.with_archetype_auto_row([(timeline, tick)], &Scalars::single(1.0))
+        });
+    }
+    test_context.set_active_timeline(*timeline.name());
+    test_context.send_time_commands(
+        test_context.active_store_id(),
+        [TimeControlCommand::SetPlayState(PlayState::Playing)],
+    );
+    test_context.set_time(5000_i64);
+    let fixed_y = components::Range1D::new(-10.0, 10.0);
+    let view_id = test_context.setup_viewport_blueprint(|ctx, blueprint| {
+        let view = ViewBlueprint::new_with_root_wildcard(TimeSeriesView::identifier());
+        ctx.save_blueprint_archetype(
+            ViewProperty::from_archetype_for_view::<ScalarAxis>(ctx, view.id).blueprint_store_path,
+            &ScalarAxis::new().with_range(fixed_y),
+        );
+        ctx.save_blueprint_archetype(
+            ViewProperty::from_archetype_for_view::<TimeAxis>(ctx, view.id).blueprint_store_path,
+            &TimeAxis::new().with_view_range(TimeRange::from_cursor_plus_minus(1000)),
+        );
+        blueprint.add_view_at_root(view)
+    });
+    let mut harness = test_context
+        .setup_kittest_for_rendering_ui(egui::vec2(500.0, 300.0))
+        .build_ui(|ui| test_context.run_with_single_view(ui, view_id));
+    harness.run();
+
+    let spans = || {
+        let (scalar, time) = axis_ranges(&test_context, view_id);
+        let range = time.unwrap();
+        let (CursorRelative(start), CursorRelative(end)) = (range.start, range.end) else {
+            panic!("zoom should keep both boundaries relative to the playing cursor");
+        };
+        let scalar = scalar.unwrap();
+        (end.0 - start.0, scalar.end() - scalar.start())
+    };
+    let start = egui::pos2(300.0, 286.0);
+    harness.hover_at(start);
+    harness.drag_at(start);
+    harness.step();
+    harness.hover_at(start - egui::vec2(12.0, 0.0));
+    harness.step();
+    let (slow_zoom, _) = spans();
+    assert!(slow_zoom > 2000, "a short leftward drag should zoom out");
+
+    test_context.set_time(5100_i64);
+    harness.hover_at(start - egui::vec2(82.0, 0.0));
+    harness.step();
+    let (fast_zoom, _) = spans();
+    assert!(
+        fast_zoom > slow_zoom,
+        "a fast leftward drag should keep zooming out"
+    );
+
+    test_context.set_time(5200_i64);
+    harness.hover_at(start);
+    harness.step();
+    harness.drop_at(start);
+    harness.run();
+    let (x_width, y_height) = spans();
+    assert!(
+        x_width.abs_diff(2000) <= 2,
+        "dragging back to the start should recover the original width within tick rounding"
+    );
+    assert_eq!(y_height, 20.0);
+
+    let start = egui::pos2(12.0, 150.0);
+    let end = start - egui::vec2(0.0, 70.0);
+    harness.hover_at(start);
+    harness.drag_at(start);
+    harness.hover_at(end);
+    harness.drop_at(end);
+    harness.run();
+    let (x_after_drag, y_after_drag) = spans();
+    assert_eq!(x_after_drag, x_width);
+    assert!(
+        y_after_drag > y_height,
+        "a fast upward drag should zoom out"
+    );
+
+    test_context.set_time(5300_i64);
+    harness.hover_at(egui::pos2(250.0, 150.0));
+    harness.event(egui::Event::Zoom(2.0));
+    harness.run();
+    let (x_after_pinch, y_after_pinch) = spans();
+    assert!(x_after_pinch < x_after_drag && y_after_pinch < y_after_drag);
+    assert_eq!(
+        test_context.time_ctrl.read().play_state(),
+        PlayState::Playing
+    );
+}
+
+#[test]
 fn double_clicking_plot_background_fits_both_axes() {
     check_timeline_fit(egui::pos2(400.0, 200.0), None);
 }

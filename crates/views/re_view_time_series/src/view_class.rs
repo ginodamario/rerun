@@ -713,6 +713,7 @@ impl ViewClass for TimeSeriesView {
                 .grid_fade(tokens.plot_grid_fade)
                 .auto_bounds(false)
                 .allow_double_click_reset(false)
+                .allow_axis_zoom_drag(false)
                 .allow_zoom(!zoom_lock)
                 .allow_scroll(!legend_hovered)
                 .custom_x_axes(vec![
@@ -757,8 +758,9 @@ impl ViewClass for TimeSeriesView {
 
             let mut new_view_time_range = None;
             let plot_outer_rect = ui.available_rect_before_wrap();
+            let axis_ui = ui.new_child(egui::UiBuilder::new().id_salt(plot_id.with("axes")));
             let egui_plot::PlotResponse {
-                inner: (),
+                inner: (x_axis_double_clicked, y_axis_double_clicked),
                 response,
                 transform,
                 hovered_plot_item: _,
@@ -772,28 +774,29 @@ impl ViewClass for TimeSeriesView {
                         re_view::set_time_cursor(ctx, current_time, Some(&view_time_range.0), time);
                 }
 
-                // Let the user pick x and y ranges from the blueprint:
-                plot_ui.set_plot_bounds_y(y_range);
+                let frame = plot_ui.response().rect;
+                let (x_range, fit_x) = plot_axis_ui(
+                    &axis_ui,
+                    egui_plot::Axis::X,
+                    egui::Rect::from_x_y_ranges(
+                        frame.x_range(),
+                        frame.bottom()..=plot_outer_rect.bottom(),
+                    ),
+                    x_range,
+                );
+                let (y_range, fit_y) = plot_axis_ui(
+                    &axis_ui,
+                    egui_plot::Axis::Y,
+                    egui::Rect::from_x_y_ranges(
+                        plot_outer_rect.left()..=frame.left(),
+                        frame.y_range(),
+                    ),
+                    y_range,
+                );
                 plot_ui.set_plot_bounds_x(x_range);
+                plot_ui.set_plot_bounds_y(y_range);
+                (fit_x, fit_y)
             });
-
-            // Sense clicks in the axis strips while egui_plot's axis widgets handle drags.
-            let axis_double_clicked = |rect: egui::Rect, id_salt: &str| {
-                rect.is_positive()
-                    && ui
-                        .interact(rect, plot_id.with(id_salt), egui::Sense::CLICK)
-                        .double_clicked()
-            };
-            let x_axis_rect = egui::Rect::from_x_y_ranges(
-                response.rect.x_range(),
-                response.rect.bottom()..=plot_outer_rect.bottom(),
-            );
-            let y_axis_rect = egui::Rect::from_x_y_ranges(
-                plot_outer_rect.left()..=response.rect.left(),
-                response.rect.y_range(),
-            );
-            let x_axis_double_clicked = axis_double_clicked(x_axis_rect, "x_axis_click");
-            let y_axis_double_clicked = axis_double_clicked(y_axis_rect, "y_axis_click");
 
             // Merge per-series finite ranges from visible series (used as the
             // fallback for `ScalarAxis::descriptor_range()`).
@@ -2116,6 +2119,53 @@ fn paint_time_cursor(
 
     ui.paint_time_cursor_with_style(ui.painter(), style, time_x, response.rect.y_range());
     Some((time, time_x))
+}
+
+/// Handle axis gestures against the blueprint range resolved for this frame's playback time.
+fn plot_axis_ui(
+    ui: &egui::Ui,
+    axis: egui_plot::Axis,
+    rect: egui::Rect,
+    range: Range1D,
+) -> (Range1D, bool) {
+    if !rect.is_positive() {
+        return (range, false);
+    }
+    let (screen_start, screen_end, cursor) = match axis {
+        egui_plot::Axis::X => (
+            rect.left(),
+            rect.right(),
+            egui::CursorIcon::ResizeHorizontal,
+        ),
+        egui_plot::Axis::Y => (rect.bottom(), rect.top(), egui::CursorIcon::ResizeVertical),
+    };
+    let index = usize::from(axis);
+    let response = ui
+        .interact(
+            rect,
+            ui.make_persistent_id(index),
+            egui::Sense::CLICK | egui::Sense::DRAG,
+        )
+        .on_hover_cursor(cursor);
+    let delta = response.drag_delta()[index];
+    if response.dragged_by(egui::PointerButton::Primary)
+        && delta != 0.0
+        && let Some(origin) = ui.input(|i| i.pointer.press_origin())
+    {
+        let anchor = egui::remap(
+            f64::from(origin[index]),
+            f64::from(screen_start)..=f64::from(screen_end),
+            range,
+        );
+        // Multiplicative zoom gives the same scale whether motion arrives in one frame or many.
+        let scale = (-0.02 * f64::from(delta)).exp();
+        let start = anchor + (range.start() - anchor) * scale;
+        let end = anchor + (range.end() - anchor) * scale;
+        if start.is_finite() && end.is_finite() && start < end {
+            return (Range1D::new(start, end), false);
+        }
+    }
+    (range, response.double_clicked())
 }
 
 /// axis = 0 is the x axis
