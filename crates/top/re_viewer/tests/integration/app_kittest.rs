@@ -42,6 +42,41 @@ async fn menu_hides_commands_without_a_target() {
 }
 
 #[tokio::test]
+async fn brackets_scale_the_current_playback_speed() {
+    use egui::Key;
+    use egui_kittest::kittest::NodeT as _;
+    use re_log_types::StoreId;
+    use re_viewer_context::{Route, SystemCommand, SystemCommandSender as _};
+
+    let mut harness = viewer_test_utils::viewer_harness(&HarnessOptions::default());
+    let recording_id = StoreId::recording("test_app", "playback_speed");
+    let app = harness.state_mut();
+    app.store_hub_mut().entity_db_entry(&recording_id);
+    app.command_sender
+        .send_system(SystemCommand::SetRoute(Route::LocalRecording {
+            recording_id,
+        }));
+    harness.run_ok();
+
+    for (key, expected) in [
+        (Key::Num3, 3.0),
+        (Key::CloseBracket, 6.0),
+        (Key::OpenBracket, 3.0),
+        (Key::OpenBracket, 1.5),
+    ] {
+        harness.key_press(key);
+        harness.run_ok();
+        assert_eq!(
+            harness
+                .get_by_label("Playback speed")
+                .accesskit_node()
+                .numeric_value(),
+            Some(expected)
+        );
+    }
+}
+
+#[tokio::test]
 async fn menu_opens_about_from_shared_commands() {
     let mut harness = viewer_test_utils::viewer_harness(&HarnessOptions::default());
     harness.get_by_label("Menu").click();

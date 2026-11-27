@@ -1515,6 +1515,8 @@ impl AppCore {
             | RecordingCommandKind::SeekForwardLong
             | RecordingCommandKind::SeekToStart
             | RecordingCommandKind::SeekToEndAndFollow
+            | RecordingCommandKind::HalvePlaybackSpeed
+            | RecordingCommandKind::DoublePlaybackSpeed
             | RecordingCommandKind::PlaybackSpeed(_) => {
                 if let Some(time_command) = TimeControlCommand::from_recording_command(kind) {
                     self.command_sender

@@ -232,6 +232,8 @@ impl CommandKind {
                 | RecordingCommandKind::SeekForwardLong
                 | RecordingCommandKind::SeekToStart
                 | RecordingCommandKind::SeekToEndAndFollow
+                | RecordingCommandKind::HalvePlaybackSpeed
+                | RecordingCommandKind::DoublePlaybackSpeed
                 | RecordingCommandKind::PlaybackSpeed(_) => false,
 
                 #[cfg(debug_assertions)]
@@ -341,6 +343,8 @@ impl CommandKind {
                 | RecordingCommandKind::SeekForwardLong
                 | RecordingCommandKind::SeekToStart
                 | RecordingCommandKind::SeekToEndAndFollow
+                | RecordingCommandKind::HalvePlaybackSpeed
+                | RecordingCommandKind::DoublePlaybackSpeed
                 | RecordingCommandKind::PlaybackSpeed(_) => false,
 
                 #[cfg(debug_assertions)]
@@ -458,6 +462,8 @@ impl CommandKind {
                 | RecordingCommandKind::SeekForwardLong
                 | RecordingCommandKind::SeekToStart
                 | RecordingCommandKind::SeekToEndAndFollow
+                | RecordingCommandKind::HalvePlaybackSpeed
+                | RecordingCommandKind::DoublePlaybackSpeed
                 | RecordingCommandKind::PlaybackSpeed(_) => true,
 
                 #[cfg(debug_assertions)]

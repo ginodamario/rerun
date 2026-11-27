@@ -87,6 +87,8 @@ pub enum RecordingCommandKind {
     SeekForwardLong,
     SeekToStart,
     SeekToEndAndFollow,
+    HalvePlaybackSpeed,
+    DoublePlaybackSpeed,
     PlaybackSpeed(SetPlaybackSpeed),
 
     // Dev-tools:
@@ -310,6 +312,10 @@ impl RecordingCommandKind {
                 "Go to end of timeline and follow the latest data as it streams in",
             ),
 
+            Self::HalvePlaybackSpeed => ("Halve playback speed", "Play at half the current speed"),
+            Self::DoublePlaybackSpeed => {
+                ("Double playback speed", "Play at twice the current speed")
+            }
             Self::PlaybackSpeed(_) => (
                 "Set playback speed",
                 "This is a chord, so you can press 5+0 to set the speed to 50x",
@@ -400,6 +406,8 @@ impl RecordingCommandKind {
             Self::SeekToStart => smallvec![cmd_shift(Key::ArrowLeft)],
             Self::SeekToEndAndFollow => smallvec![cmd_shift(Key::ArrowRight)],
 
+            Self::HalvePlaybackSpeed => smallvec![key(Key::OpenBracket)],
+            Self::DoublePlaybackSpeed => smallvec![key(Key::CloseBracket)],
             Self::PlaybackSpeed(_) => {
                 // This is a chord, so no single shortcut.
                 smallvec![]

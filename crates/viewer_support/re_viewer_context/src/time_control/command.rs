@@ -80,6 +80,9 @@ pub enum TimeControlCommand {
     /// Set playback speed.
     SetSpeed(f32),
 
+    /// Multiply the current playback speed by a factor, keeping it unchanged if the result is zero or non-finite.
+    ScaleSpeed(f32),
+
     /// Set playback fps.
     SetFps(f32),
 
@@ -176,6 +179,8 @@ impl TimeControlCommand {
                 speed: MoveSpeed::Fast,
             },
             RecordingCommandKind::SeekToStart => Self::MoveBeginning,
+            RecordingCommandKind::HalvePlaybackSpeed => Self::ScaleSpeed(0.5),
+            RecordingCommandKind::DoublePlaybackSpeed => Self::ScaleSpeed(2.0),
             RecordingCommandKind::PlaybackSpeed(speed) => Self::SetSpeed(speed.0.0),
             _ => return None,
         })
@@ -395,6 +400,13 @@ impl TimeControl {
                 db,
                 &TimeControlCommand::SetPlayState(PlayState::Following),
             ),
+            TimeControlCommand::ScaleSpeed(factor) => {
+                let speed = self.speed * factor;
+                if speed == 0.0 || !speed.is_finite() {
+                    return NeedsRepaint::No;
+                }
+                self.handle_time_command(blueprint_ctx, db, &TimeControlCommand::SetSpeed(speed))
+            }
             TimeControlCommand::SetSpeed(speed) => {
                 if *speed == self.speed {
                     NeedsRepaint::No

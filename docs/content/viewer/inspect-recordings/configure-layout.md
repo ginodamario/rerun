@@ -48,7 +48,7 @@ The timeline controls sit at the top of the timeline panel and allow you to cont
 
 They play, pause, step, and loop time like a video player.
 When looping you can choose to loop through the whole recording, or just a sub-section of timeline that you select.
-The rate of playback can also be sped up or slowed down by adjusting the rate multiplier.
+Adjust the playback speed multiplier directly, or press `[` to halve the current speed and `]` to double it.
 
 Press `T` to select the **Current time** field, type a timestamp, and press `Enter` to jump there.
 Use a tick number on a sequence timeline or a duration such as `12.5s` on a duration timeline.
